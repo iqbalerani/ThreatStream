@@ -8,6 +8,10 @@ import StatsBar from './components/StatsBar';
 import LiveKafkaStream from './components/LiveKafkaStream';
 import { SecurityEvent, EventStatus, EventType, ThreatLevel, AIReasoning, TimelineData, Severity, DashboardStats, ScenarioType } from './types';
 import { analyzeThreat } from './geminiService';
+import { getWebSocketService } from './services/websocketService';
+import { BackendService } from './services/backendService';
+import { mapBackendThreatToSecurityEvent, mapBackendDashboardStatsToFrontend, createSimulationEvent } from './typeMappers';
+import { BackendWebSocketMessage } from './backendTypes';
 
 const COUNTRY_COORDS: Record<string, [number, number]> = {
   'US': [37.0902, -95.7129],
@@ -54,85 +58,88 @@ const App: React.FC = () => {
 
   const eventIdCounter = useRef(0);
   const lastAnalysisRef = useRef(0);
+  const wsRef = useRef(getWebSocketService());
 
+  // WebSocket connection and message handling
   useEffect(() => {
-    if (!isStreaming) return;
+    const ws = wsRef.current;
 
-    const interval = setInterval(() => {
-      const isAttack = scenario !== 'normal';
-      const isSuspicious = isAttack && Math.random() > 0.2;
-      
-      const countries = ['US', 'DE', 'GB', 'IN', 'BR'];
-      const attackCountries = ['RU', 'CN', 'KP', 'IR'];
-      const currentCountry = isSuspicious ? attackCountries[Math.floor(Math.random() * attackCountries.length)] : countries[Math.floor(Math.random() * countries.length)];
+    // Connect to backend WebSocket
+    ws.connect();
 
-      let eventType = [EventType.LOGIN, EventType.API_REQ, EventType.FIREWALL, EventType.AUTH][Math.floor(Math.random() * 4)];
-      let description = 'Standard transaction processed via edge gateway.';
-      let mitre = undefined;
+    // Handle WebSocket messages
+    const unsubscribeMessages = ws.onMessage((message: BackendWebSocketMessage) => {
+      switch (message.type) {
+        case 'initial_state':
+          // Load initial state from backend
+          console.log('Received initial state from backend');
+          const initialEvents = message.data.threats.map(mapBackendThreatToSecurityEvent);
+          setEvents(initialEvents.slice(0, 50));
+          if (message.data.stats) {
+            setStats(mapBackendDashboardStatsToFrontend(message.data.stats));
+          }
+          if (message.data.risk_index) {
+            setRiskScore(message.data.risk_index.value);
+          }
+          break;
 
-      if (isSuspicious) {
-        switch (scenario) {
-          case 'brute_force':
-            eventType = EventType.BRUTE_FORCE;
-            description = 'Massive authentication failures detected on management interface.';
-            mitre = 'T1110';
-            break;
-          case 'sql_injection':
-            eventType = EventType.SQL_INJ;
-            description = 'WAF Alert: SQL Injection pattern detected in query parameters.';
-            mitre = 'T1190';
-            break;
-          case 'ddos':
-            eventType = EventType.DDOS;
-            description = 'Anomaly: Unexpected spike in UDP traffic from distributed sources.';
-            mitre = 'T1498';
-            break;
-          case 'ransomware':
-            eventType = EventType.RANSOMWARE;
-            description = 'File System: Bulk encryption pattern detected in shared volumes.';
-            mitre = 'T1486';
-            break;
-        }
+        case 'new_threat':
+          // Add new threat to event stream
+          const newEvent = mapBackendThreatToSecurityEvent(message.data);
+          setEvents(prev => [newEvent, ...prev].slice(0, 50));
+
+          // Update risk score based on threat severity
+          if (message.data.risk_score) {
+            setRiskScore(message.data.risk_score);
+          }
+          break;
+
+        case 'new_alert':
+          // Handle new alert (could show notification)
+          console.log('New alert:', message.data);
+          break;
+
+        case 'metrics_update':
+          // Update dashboard stats
+          setStats(mapBackendDashboardStatsToFrontend(message.data));
+          break;
+
+        case 'risk_update':
+          // Update risk score
+          setRiskScore(message.data.value);
+          break;
       }
+    });
 
-      const newEvent: SecurityEvent = {
-        id: `TX-${++eventIdCounter.current}`,
-        timestamp: new Date(),
-        type: eventType,
-        sourceIp: isSuspicious ? `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}` : `10.0.0.${Math.floor(Math.random() * 255)}`,
-        userId: isSuspicious ? 'sys_admin_vulnerable' : `user_${Math.floor(Math.random() * 1000)}`,
-        status: isSuspicious ? EventStatus.SUSPICIOUS : (Math.random() > 0.95 ? EventStatus.FAILURE : EventStatus.SUCCESS),
-        description,
-        severity: isSuspicious ? Severity.CRITICAL : (Math.random() > 0.8 ? Severity.MEDIUM : Severity.INFO),
-        country: currentCountry,
-        coordinates: COUNTRY_COORDS[currentCountry] || [0, 0],
-        mitre
-      };
+    // Handle WebSocket status changes
+    const unsubscribeStatus = ws.onStatus((status) => {
+      console.log('WebSocket status:', status);
+      setIsStreaming(status === 'connected');
+    });
 
-      setEvents(prev => [newEvent, ...prev].slice(0, 50));
-      setEps(isAttack ? Math.floor(Math.random() * 100) + 50 : Math.floor(Math.random() * 5) + 1);
+    // Cleanup on unmount
+    return () => {
+      unsubscribeMessages();
+      unsubscribeStatus();
+      ws.disconnect();
+    };
+  }, []);
 
-      setStats(prev => {
-        const newLatency = isAttack ? Math.max(70, prev.avgDetectTime - (Math.random() * 2)) : Math.min(130, prev.avgDetectTime + (Math.random() * 1));
-        return {
-          ...prev,
-          processed: prev.processed + 1,
-          blocked: isAttack && Math.random() > 0.8 ? prev.blocked + 1 : prev.blocked,
-          critical: isAttack && isSuspicious ? prev.critical + 1 : prev.critical,
-          avgDetectTime: Math.round(newLatency),
-          latencyHistory: [...prev.latencyHistory.slice(-14), Math.round(newLatency)]
-        };
-      });
+  // Scenario simulation - send events to backend when scenario changes
+  useEffect(() => {
+    if (!isStreaming || scenario === 'normal') return;
 
-      setRiskScore(prev => {
-        if (mitigationActive) return Math.max(8, prev - 1.5);
-        let next = isAttack ? prev + (Math.random() * 12) : prev + (Math.random() * 2 - 1.5);
-        return Math.min(100, Math.max(0, next));
-      });
-    }, scenario !== 'normal' ? 400 : 1200);
+    const interval = setInterval(async () => {
+      try {
+        const eventData = createSimulationEvent(scenario);
+        await BackendService.simulateEvent(eventData);
+      } catch (error) {
+        console.error('Error simulating event:', error);
+      }
+    }, 400);
 
     return () => clearInterval(interval);
-  }, [isStreaming, scenario, mitigationActive]);
+  }, [isStreaming, scenario]);
 
   useEffect(() => {
     if (riskScore > 65) setThreatLevel(ThreatLevel.CRITICAL);
@@ -169,13 +176,13 @@ const App: React.FC = () => {
     setAiReasoning(INITIAL_REASONING);
     setMitigationActive(false);
     setPlaybookStep(null);
-    setStats({ 
-      processed: 12847, 
-      blocked: 234, 
-      critical: 0, 
-      avgDetectTime: 127,
-      latencyHistory: [130, 125, 128, 122, 127, 120, 115, 118, 110, 105]
-    });
+
+    // Reconnect to WebSocket to get fresh state
+    const ws = wsRef.current;
+    ws.disconnect();
+    setTimeout(() => {
+      ws.connect();
+    }, 500);
   };
 
   const handleExecuteMitigation = async () => {
