@@ -36,6 +36,35 @@ async def lifespan(app: FastAPI):
     threat_processor = get_threat_processor()
     metrics_service = get_metrics_service()
 
+    # Initialize Kafka consumer (if credentials are configured)
+    kafka_consumer = None
+    consumer_task = None
+
+    if settings.confluent_bootstrap_servers and settings.confluent_api_key:
+        try:
+            logger.info("🔌 Initializing Kafka consumer...")
+            from app.core.kafka_consumer import ThreatStreamConsumer
+
+            kafka_consumer = ThreatStreamConsumer(
+                topic=settings.kafka_raw_topic,
+                group_id=settings.kafka_consumer_group
+            )
+
+            # Register threat processor as event handler
+            kafka_consumer.add_handler(threat_processor.process_event)
+
+            # Start consumer in background
+            consumer_task = asyncio.create_task(kafka_consumer.start())
+
+            logger.info(f"✅ Kafka consumer started for topic: {settings.kafka_raw_topic}")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Kafka consumer: {e}")
+            logger.warning("⚠️  Running without Kafka consumer (REST API mode)")
+            kafka_consumer = None
+            consumer_task = None
+    else:
+        logger.warning("⚠️  Kafka credentials not configured - running without Kafka consumer")
+
     # Start background tasks
     heartbeat_task = asyncio.create_task(ws_manager.heartbeat_loop())
     metrics_task = asyncio.create_task(metrics_service.start_aggregation())
@@ -51,8 +80,19 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("🛑 Shutting down ThreatStream Backend...")
+
+    # Cancel background tasks
     heartbeat_task.cancel()
     metrics_task.cancel()
+
+    # Stop Kafka consumer if running
+    if consumer_task:
+        logger.info("🛑 Stopping Kafka consumer...")
+        consumer_task.cancel()
+
+    if kafka_consumer:
+        kafka_consumer.stop()
+
     logger.info("👋 ThreatStream Backend shutdown complete")
 
 

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThreatStream WebSocket Test</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0e1a;
+            color: #e0e0e0;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #6366f1;
+            border-bottom: 2px solid #6366f1;
+            padding-bottom: 10px;
+        }
+        .controls {
+            background: #1a1f2e;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid #2a2f3e;
+        }
+        button {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #4f46e5;
+        }
+        button:disabled {
+            background: #4a4a4a;
+            cursor: not-allowed;
+        }
+        button.danger {
+            background: #ef4444;
+        }
+        button.danger:hover {
+            background: #dc2626;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.connected {
+            background: #10b981;
+            color: white;
+        }
+        .status.connecting {
+            background: #f59e0b;
+            color: white;
+        }
+        .status.disconnected {
+            background: #6b7280;
+            color: white;
+        }
+        .status.error {
+            background: #ef4444;
+            color: white;
+        }
+        .log {
+            background: #000;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 8px;
+            height: 400px;
+            overflow-y: auto;
+            font-size: 12px;
+            line-height: 1.6;
+            margin: 20px 0;
+            border: 1px solid #2a2f3e;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid transparent;
+        }
+        .log-entry.info {
+            border-left-color: #3b82f6;
+        }
+        .log-entry.success {
+            border-left-color: #10b981;
+        }
+        .log-entry.warning {
+            border-left-color: #f59e0b;
+        }
+        .log-entry.error {
+            border-left-color: #ef4444;
+        }
+        .message-preview {
+            background: #1a1f2e;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid #2a2f3e;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #1a1f2e;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #2a2f3e;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #6366f1;
+        }
+        .stat-label {
+            color: #9ca3af;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        pre {
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 ThreatStream WebSocket Connection Test</h1>
+
+    <div class="controls">
+        <h3>WebSocket Status: <span class="status disconnected" id="status">DISCONNECTED</span></h3>
+
+        <div style="margin: 15px 0;">
+            <label for="wsUrl" style="display: block; margin-bottom: 5px;">WebSocket URL:</label>
+            <input type="text" id="wsUrl" value="ws://localhost:8000/ws/live"
+                   style="width: 400px; padding: 8px; background: #0a0e1a; color: white; border: 1px solid #2a2f3e; border-radius: 4px;">
+        </div>
+
+        <button id="connectBtn" onclick="connect()">Connect</button>
+        <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+        <button onclick="requestState()">Request State</button>
+        <button onclick="clearLog()">Clear Log</button>
+        <button onclick="simulateEvent()" class="danger">Simulate Test Event</button>
+    </div>
+
+    <div class="stats">
+        <div class="stat-card">
+            <div class="stat-label">Messages Received</div>
+            <div class="stat-value" id="messageCount">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Threats Received</div>
+            <div class="stat-value" id="threatCount">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Alerts Received</div>
+            <div class="stat-value" id="alertCount">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Connection Time</div>
+            <div class="stat-value" id="connectionTime">--</div>
+        </div>
+    </div>
+
+    <div class="message-preview">
+        <h3>Last Message Received:</h3>
+        <pre id="lastMessage">No messages yet</pre>
+    </div>
+
+    <div class="log" id="log">
+        <div class="log-entry info">🔵 Waiting for connection...</div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageCount = 0;
+        let threatCount = 0;
+        let alertCount = 0;
+        let connectionStartTime = null;
+
+        function updateStatus(status, text) {
+            const statusEl = document.getElementById('status');
+            statusEl.className = `status ${status}`;
+            statusEl.textContent = text;
+
+            document.getElementById('connectBtn').disabled = (status === 'connected' || status === 'connecting');
+            document.getElementById('disconnectBtn').disabled = (status === 'disconnected');
+        }
+
+        function log(message, type = 'info') {
+            const logEl = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+
+            const timestamp = new Date().toLocaleTimeString();
+            const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : '🔵';
+
+            entry.innerHTML = `<span style="color: #6b7280;">[${timestamp}]</span> ${icon} ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '<div class="log-entry info">🔵 Log cleared</div>';
+            messageCount = 0;
+            threatCount = 0;
+            alertCount = 0;
+            updateStats();
+        }
+
+        function updateStats() {
+            document.getElementById('messageCount').textContent = messageCount;
+            document.getElementById('threatCount').textContent = threatCount;
+            document.getElementById('alertCount').textContent = alertCount;
+
+            if (connectionStartTime) {
+                const elapsed = Math.floor((Date.now() - connectionStartTime) / 1000);
+                document.getElementById('connectionTime').textContent = `${elapsed}s`;
+            }
+        }
+
+        function connect() {
+            const url = document.getElementById('wsUrl').value;
+
+            log(`Attempting to connect to ${url}`, 'info');
+            updateStatus('connecting', 'CONNECTING');
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = () => {
+                    connectionStartTime = Date.now();
+                    log('✨ WebSocket connection established!', 'success');
+                    updateStatus('connected', 'CONNECTED');
+                    updateStats();
+                };
+
+                ws.onmessage = (event) => {
+                    messageCount++;
+                    updateStats();
+
+                    try {
+                        const message = JSON.parse(event.data);
+
+                        log(`Received message: ${message.type}`, 'success');
+
+                        // Update last message preview
+                        document.getElementById('lastMessage').textContent = JSON.stringify(message, null, 2);
+
+                        // Handle different message types
+                        switch (message.type) {
+                            case 'initial_state':
+                                log(`📊 Initial state: ${message.data.threats?.length || 0} threats, ${message.data.alerts?.length || 0} alerts`, 'success');
+                                if (message.data.threats) {
+                                    threatCount += message.data.threats.length;
+                                }
+                                if (message.data.alerts) {
+                                    alertCount += message.data.alerts.length;
+                                }
+                                break;
+
+                            case 'new_threat':
+                                threatCount++;
+                                log(`🔴 New threat: ${message.data.id} - ${message.data.severity} - ${message.data.threat_type}`, 'warning');
+                                break;
+
+                            case 'new_alert':
+                                alertCount++;
+                                log(`🚨 New alert: ${message.data.id} - ${message.data.severity}`, 'error');
+                                break;
+
+                            case 'metrics_update':
+                                log(`📈 Metrics update: Processed=${message.data.processed}, Critical=${message.data.critical}`, 'info');
+                                break;
+
+                            case 'risk_update':
+                                log(`⚠️ Risk update: ${message.data.value} (${message.data.level})`, 'warning');
+                                break;
+
+                            case 'heartbeat':
+                                // Don't log heartbeats to avoid spam
+                                break;
+
+                            default:
+                                log(`Unknown message type: ${message.type}`, 'warning');
+                        }
+
+                        updateStats();
+
+                    } catch (e) {
+                        log(`Error parsing message: ${e.message}`, 'error');
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    log(`WebSocket error occurred`, 'error');
+                    console.error('WebSocket error:', error);
+                    updateStatus('error', 'ERROR');
+                };
+
+                ws.onclose = (event) => {
+                    log(`WebSocket connection closed (Code: ${event.code}, Reason: ${event.reason || 'No reason provided'})`, 'warning');
+                    updateStatus('disconnected', 'DISCONNECTED');
+                    connectionStartTime = null;
+                };
+
+            } catch (error) {
+                log(`Failed to create WebSocket: ${error.message}`, 'error');
+                updateStatus('error', 'ERROR');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                log('Closing WebSocket connection...', 'info');
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function requestState() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const message = { type: 'request_state' };
+                ws.send(JSON.stringify(message));
+                log('📤 Sent request_state message', 'info');
+            } else {
+                log('Cannot send message: WebSocket not connected', 'error');
+            }
+        }
+
+        async function simulateEvent() {
+            if (!confirm('This will send a test event to the backend. Continue?')) {
+                return;
+            }
+
+            const eventData = {
+                event_id: `test-${Date.now()}`,
+                timestamp: new Date().toISOString(),
+                event_type: 'brute_force',
+                source_ip: '185.234.72.91',
+                destination_ip: '10.0.0.100',
+                destination_port: 22,
+                protocol: 'TCP',
+                payload: { attempts: 150 },
+                metadata: { test: true }
+            };
+
+            log('🔥 Sending test event to backend...', 'info');
+
+            try {
+                const response = await fetch('http://localhost:8000/api/simulate/event', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(eventData)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    log(`✅ Event simulated successfully! Threat ID: ${result.threat?.id}`, 'success');
+                    log('💡 Watch for new_threat message via WebSocket...', 'info');
+                } else {
+                    log(`❌ Event simulation failed: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Error simulating event: ${error.message}`, 'error');
+            }
+        }
+
+        // Update connection time every second
+        setInterval(() => {
+            if (connectionStartTime) {
+                updateStats();
+            }
+        }, 1000);
+
+        // Auto-connect on load
+        window.addEventListener('load', () => {
+            log('🚀 WebSocket test page loaded. Click "Connect" to start.', 'info');
+        });
+    </script>
+</body>
+</html>
