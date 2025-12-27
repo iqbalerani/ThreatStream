@@ -25,7 +25,7 @@ const Header: React.FC<HeaderProps> = ({ threatLevel, isStreaming, eps }) => {
           {ICONS.SHIELD}
         </div>
         <div>
-          <h1 className="text-xl font-black tracking-tighter text-white leading-none">ThreatStream <span className="text-indigo-500">v2</span></h1>
+          <h1 className="text-xl font-black tracking-tighter text-white leading-none">ThreatStream</h1>
           <div className="flex items-center gap-3 mt-1">
              <span className="flex items-center gap-1 text-[9px] font-bold text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
                <span className="h-1 w-1 rounded-full bg-orange-500" /> CONFLUENT KAFKA

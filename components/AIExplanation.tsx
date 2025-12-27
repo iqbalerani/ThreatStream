@@ -19,7 +19,7 @@ const AIExplanation: React.FC<AIExplanationProps> = ({ reasoning, onMitigate, mi
            }`}>
              CONFIDENCE: {reasoning.confidence.toUpperCase()}
            </span>
-           <span className="text-[9px] font-bold text-slate-500 mono uppercase tracking-widest">Audit Ref: Gemini-v2</span>
+           <span className="text-[9px] font-bold text-slate-500 mono uppercase tracking-widest">Audit Ref: Gemini-Pro-Engine</span>
         </div>
         <p className="text-sm font-black text-white leading-snug tracking-tight">
           "{reasoning.summary}"
