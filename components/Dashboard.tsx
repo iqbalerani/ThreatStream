@@ -26,7 +26,7 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ events, riskScore, threatLevel, aiReasoning, isAnalyzing, timeline, onEventClick, onMitigate, mitigationActive, eps, onOpenStream }) => {
   return (
     <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
-      {/* LEFT COLUMN: Intelligence Ingest */}
+      {/* TOP SECTION: Intelligence Ingest & Real-time AI */}
       <div className="lg:col-span-4 flex flex-col h-[700px]">
         <div className="bg-[#0f172a] border border-slate-800 rounded-[2.5rem] flex flex-col flex-1 overflow-hidden shadow-2xl relative backdrop-blur-3xl">
           <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/40 shrink-0">
@@ -47,7 +47,6 @@ const Dashboard: React.FC<DashboardProps> = ({ events, riskScore, threatLevel, a
         </div>
       </div>
 
-      {/* RIGHT COLUMN: Real-time Analytics & AI */}
       <div className="lg:col-span-8 space-y-6 flex flex-col h-[700px]">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1">
           {/* Main Risk Display */}
@@ -81,47 +80,64 @@ const Dashboard: React.FC<DashboardProps> = ({ events, riskScore, threatLevel, a
         </div>
       </div>
 
-      {/* BOTTOM ROW: The Intelligence Matrix (Expanded) */}
-      <div className="lg:col-span-12 grid grid-cols-1 md:grid-cols-12 gap-6 h-[480px]">
-        {/* Global Vectors (Larger Map) */}
-        <div className="md:col-span-6 bg-[#0f172a] border border-slate-800 rounded-[2.5rem] p-4 shadow-2xl relative overflow-hidden flex flex-col">
-          <div className="px-6 py-4 border-b border-slate-800/50 mb-2 flex justify-between items-center">
-            <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 flex items-center gap-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-indigo-500"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-              Global Attack Surface
-            </h2>
-            <div className="flex gap-2">
-               <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-               <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Synchronized Live</span>
+      {/* BOTTOM SECTION: Intelligence Matrix (Stacked Layout) */}
+      <div className="lg:col-span-12 grid grid-cols-1 md:grid-cols-12 gap-6 min-h-[750px] pb-12">
+        {/* PRIMARY COLUMN: Map + Trajectory Stacked */}
+        <div className="md:col-span-8 flex flex-col gap-6 h-full">
+          {/* Global Vectors */}
+          <div className="flex-[3] bg-[#0f172a] border border-slate-800 rounded-[2.5rem] p-4 shadow-2xl relative overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-800/50 mb-2 flex justify-between items-center">
+              <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-indigo-500"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                Global Attack Surface
+              </h2>
+              <div className="flex gap-2">
+                 <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                 <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Synchronized Live</span>
+              </div>
+            </div>
+            <div className="flex-1 rounded-[1.5rem] overflow-hidden">
+              <ThreatMap events={events} />
             </div>
           </div>
-          <div className="flex-1 rounded-[1.5rem] overflow-hidden">
-            <ThreatMap events={events} />
+
+          {/* Historical Risk - Now below the Map */}
+          <div className="flex-[2] bg-[#0f172a] border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl flex flex-col">
+            <div className="mb-4 flex justify-between items-center">
+              <div>
+                <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 mb-1">Risk Trajectory</h2>
+                <p className="text-[8px] font-bold text-slate-600 uppercase">30-Minute Telemetry Window</p>
+              </div>
+              <div className="bg-indigo-500/5 border border-indigo-500/10 px-3 py-1 rounded text-[9px] font-black text-indigo-400 uppercase tracking-widest">
+                Real-time Propagation
+              </div>
+            </div>
+            <div className="flex-1">
+              <Timeline data={timeline} />
+            </div>
           </div>
         </div>
 
-        {/* Historical Risk */}
-        <div className="md:col-span-3 bg-[#0f172a] border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl flex flex-col">
-          <div className="mb-8">
-            <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 mb-1">Risk Trajectory</h2>
-            <p className="text-[8px] font-bold text-slate-600 uppercase">30-Minute Telemetry Window</p>
-          </div>
-          <div className="flex-1">
-            <Timeline data={timeline} />
-          </div>
-        </div>
-
-        {/* Origin Distribution */}
-        <div className="md:col-span-3 bg-[#0f172a] border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden flex flex-col">
-          <div className="mb-6 flex justify-between items-end">
+        {/* SIDEBAR: Origin Distribution */}
+        <div className="md:col-span-4 bg-[#0f172a] border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden flex flex-col h-full">
+          <div className="mb-8 flex justify-between items-end">
             <div>
               <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 mb-1">Ingress Origins</h2>
               <p className="text-[8px] font-bold text-slate-600 uppercase">Top Malicious Sources</p>
             </div>
-            <span className="text-[18px] font-black text-white mono opacity-10">#01</span>
+            <span className="text-[24px] font-black text-white mono opacity-5">MATRIX-01</span>
           </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
             <TopSources events={events} />
+          </div>
+          <div className="mt-8 pt-6 border-t border-slate-800/50">
+             <div className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50">
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Geo-Fence Status</span>
+                <div className="flex items-center gap-2">
+                   <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                   <span className="text-[10px] text-white font-bold mono">AUTO_BLOCK: ACTIVE</span>
+                </div>
+             </div>
           </div>
         </div>
       </div>
