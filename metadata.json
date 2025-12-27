@@ -1,0 +1,5 @@
+{
+  "name": "ThreatStream v3: Hackathon Intelligence",
+  "description": "Enterprise-grade SOC dashboard with global threat mapping, Gemini Pro forensics, and real-time Kafka simulation.",
+  "requestFramePermissions": []
+}
