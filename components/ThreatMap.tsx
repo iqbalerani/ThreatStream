@@ -35,23 +35,20 @@ const ThreatMap: React.FC<ThreatMapProps> = ({ events }) => {
 
     initGlobe();
 
-    const updateDimensions = () => {
-      if (containerRef.current) {
-        setDimensions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
-      }
-    };
+    // ResizeObserver is much more accurate for layout transitions than window resize
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!entries[0]) return;
+      const { width, height } = entries[0].contentRect;
+      setDimensions({ width, height });
+    });
 
-    updateDimensions();
-    window.addEventListener('resize', updateDimensions);
-    const timer = setTimeout(updateDimensions, 300);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
 
     return () => {
       isMounted = false;
-      window.removeEventListener('resize', updateDimensions);
-      clearTimeout(timer);
+      resizeObserver.disconnect();
     };
   }, []);
 
@@ -79,13 +76,13 @@ const ThreatMap: React.FC<ThreatMapProps> = ({ events }) => {
   }, [events]);
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-[#020617] rounded-[1.5rem] overflow-hidden group">
+    <div ref={containerRef} className="relative w-full h-full bg-[#020617] overflow-hidden group">
       {/* Visual Mesh Placeholder */}
-      <div className="absolute inset-0 opacity-[0.05] z-0" 
+      <div className="absolute inset-0 opacity-[0.05] z-0 pointer-events-none" 
            style={{ backgroundImage: 'radial-gradient(#6366f1 1px, transparent 0)', backgroundSize: '30px 30px' }} />
 
       {!globeReady && !loadError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-50">
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-50 bg-[#020617]">
            <div className="h-6 w-6 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-4" />
            <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Aligning Orbital Nodes...</span>
         </div>
@@ -93,7 +90,7 @@ const ThreatMap: React.FC<ThreatMapProps> = ({ events }) => {
 
       {loadError && (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center z-50">
-           <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+           <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800 shadow-2xl">
              <svg className="text-slate-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">{loadError}</span>
              <p className="text-[8px] text-slate-700 mt-2 font-bold uppercase">Heuristic Data streaming via 2D Terminal</p>
@@ -102,40 +99,42 @@ const ThreatMap: React.FC<ThreatMapProps> = ({ events }) => {
       )}
 
       {globeReady && GlobeComponent && dimensions.width > 0 && (
-        <GlobeComponent
-          width={dimensions.width}
-          height={dimensions.height}
-          backgroundColor="rgba(0,0,0,0)"
-          globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg"
-          atmosphereColor="#4338ca"
-          atmosphereAltitude={0.15}
-          
-          onGlobeReady={(globe: any) => {
-            globe.controls().autoRotate = true;
-            globe.controls().autoRotateSpeed = 0.5;
-            globe.pointOfView({ lat: 20, lng: -40, altitude: 2.3 }, 0);
-          }}
+        <div className="w-full h-full animate-in fade-in duration-1000">
+          <GlobeComponent
+            width={dimensions.width}
+            height={dimensions.height}
+            backgroundColor="rgba(0,0,0,0)"
+            globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg"
+            atmosphereColor="#4338ca"
+            atmosphereAltitude={0.15}
+            
+            onGlobeReady={(globe: any) => {
+              globe.controls().autoRotate = true;
+              globe.controls().autoRotateSpeed = 0.5;
+              globe.pointOfView({ lat: 20, lng: -40, altitude: 2.3 }, 0);
+            }}
 
-          arcsData={arcData}
-          arcColor="color"
-          arcDashLength={0.4}
-          arcDashGap={2}
-          arcDashAnimateTime={2000}
-          arcStroke={0.5}
+            arcsData={arcData}
+            arcColor="color"
+            arcDashLength={0.4}
+            arcDashGap={2}
+            arcDashAnimateTime={2000}
+            arcStroke={0.5}
 
-          ringsData={ringsData}
-          ringColor={() => "#ef4444"}
-          ringMaxRadius={8}
-          ringPropagationSpeed={2.5}
-          ringRepeatPeriod={1000}
-        />
+            ringsData={ringsData}
+            ringColor={() => "#ef4444"}
+            ringMaxRadius={8}
+            ringPropagationSpeed={2.5}
+            ringRepeatPeriod={1000}
+          />
+        </div>
       )}
 
       {/* Map Hud */}
-      <div className="absolute top-4 left-4 z-20 pointer-events-none">
-         <div className="bg-slate-900/60 backdrop-blur-md border border-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[8px] font-black text-white uppercase tracking-[0.2em]">Live Surface View</span>
+      <div className="absolute top-4 left-4 z-20 pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity">
+         <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 px-4 py-2 rounded-xl flex items-center gap-3 shadow-2xl">
+            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+            <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">Orbital Stream Verified</span>
          </div>
       </div>
     </div>

@@ -83,12 +83,12 @@ const Dashboard: React.FC<DashboardProps> = ({ events, riskScore, threatLevel, a
       </div>
 
       {/* BOTTOM SECTION: Intelligence Matrix */}
-      <div className="lg:col-span-12 grid grid-cols-1 md:grid-cols-12 gap-6 min-h-[750px] pb-12">
+      <div className={`lg:col-span-12 grid grid-cols-1 md:grid-cols-12 gap-6 pb-12 transition-all ${isMapFullscreen ? 'min-h-0' : 'min-h-[750px]'}`}>
         {/* Map Column */}
-        <div className="md:col-span-8 flex flex-col gap-6 h-full">
+        <div className={`${isMapFullscreen ? 'col-span-12' : 'md:col-span-8'} flex flex-col gap-6 h-full`}>
           {/* Global Attack Surface Map Container */}
-          <div className={`${isMapFullscreen ? 'fixed inset-0 z-[150] bg-[#020617] rounded-none p-0' : 'flex-[3] bg-[#0f172a] border border-slate-800 rounded-[2.5rem] p-4 shadow-2xl flex flex-col'} relative overflow-hidden transition-all duration-500`}>
-            <div className={`px-6 py-4 border-b border-slate-800/50 mb-2 flex justify-between items-center ${isMapFullscreen ? 'absolute top-0 left-0 right-0 z-[160] bg-slate-900/80 backdrop-blur-xl border-b border-slate-800' : ''}`}>
+          <div className={`${isMapFullscreen ? 'fixed inset-0 z-[200] bg-[#020617] rounded-none p-0 overflow-hidden transform-gpu' : 'flex-[3] bg-[#0f172a] border border-slate-800 rounded-[2.5rem] p-4 shadow-2xl flex flex-col overflow-hidden'} relative transition-all duration-500`}>
+            <div className={`px-6 py-4 flex justify-between items-center shrink-0 border-b border-slate-800/50 ${isMapFullscreen ? 'bg-slate-900/90 backdrop-blur-2xl z-20' : 'mb-2'}`}>
               <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 flex items-center gap-3">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-indigo-500"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                 Global Attack Surface
@@ -101,11 +101,11 @@ const Dashboard: React.FC<DashboardProps> = ({ events, riskScore, threatLevel, a
                  
                  <button 
                   onClick={() => setIsMapFullscreen(!isMapFullscreen)}
-                  className={`p-2 rounded-xl transition-all ${isMapFullscreen ? 'bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                  className={`p-2 rounded-xl transition-all shadow-xl ${isMapFullscreen ? 'bg-red-500 text-white hover:bg-red-600 ring-4 ring-red-500/20' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'}`}
                   title={isMapFullscreen ? "Exit Tactical View" : "Enter Tactical View"}
                  >
                    {isMapFullscreen ? (
-                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M8 3v5H3M21 8h-5V3M3 16h5v5M16 21v-5h5"/></svg>
+                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M8 3v5H3M21 8h-5V3M3 16h5v5M16 21v-5h5"/></svg>
                    ) : (
                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m15 3 6 6M9 21l-6-6M21 3l-6 6M3 21l6-6"/></svg>
                    )}
@@ -113,23 +113,29 @@ const Dashboard: React.FC<DashboardProps> = ({ events, riskScore, threatLevel, a
               </div>
             </div>
             
-            <div className={`flex-1 ${isMapFullscreen ? 'h-screen' : 'rounded-[1.5rem] overflow-hidden'}`}>
+            <div className={`flex-1 relative ${isMapFullscreen ? 'h-[calc(100vh-68px)]' : 'rounded-[1.5rem] overflow-hidden'}`}>
               <ThreatMap events={events} />
             </div>
 
             {isMapFullscreen && (
-              <div className="absolute bottom-10 left-10 z-[160] pointer-events-none">
-                 <div className="bg-slate-900/80 backdrop-blur-xl border border-indigo-500/30 p-6 rounded-3xl shadow-2xl">
-                    <h3 className="text-white font-black text-xs mb-1 tracking-widest uppercase">Tactical Overlook</h3>
-                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-4">Real-time Ingress Vectors</p>
-                    <div className="flex gap-10">
+              <div className="absolute bottom-10 left-10 z-[210] pointer-events-none animate-in slide-in-from-left duration-700">
+                 <div className="bg-slate-900/90 backdrop-blur-2xl border border-indigo-500/30 p-8 rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.8)] border-l-4 border-l-indigo-500">
+                    <h3 className="text-white font-black text-[10px] mb-1 tracking-[0.3em] uppercase opacity-70">Tactical Overlook</h3>
+                    <p className="text-[12px] text-white font-black uppercase tracking-widest mb-6">Real-time Ingress Vectors</p>
+                    <div className="flex gap-16">
                        <div className="flex flex-col">
-                          <span className="text-[8px] text-indigo-400 font-black mb-1 uppercase tracking-widest">ACTIVE_THREATS</span>
-                          <span className="text-xl font-black text-white mono">{events.filter(e => e.severity === 'critical').length}</span>
+                          <span className="text-[9px] text-indigo-400 font-black mb-1 uppercase tracking-widest">ACTIVE_THREATS</span>
+                          <span className="text-3xl font-black text-white mono">{events.filter(e => e.severity === 'critical').length}</span>
                        </div>
                        <div className="flex flex-col">
-                          <span className="text-[8px] text-indigo-400 font-black mb-1 uppercase tracking-widest">SOURCE_NODES</span>
-                          <span className="text-xl font-black text-white mono">{new Set(events.map(e => e.sourceIp)).size}</span>
+                          <span className="text-[9px] text-indigo-400 font-black mb-1 uppercase tracking-widest">SOURCE_NODES</span>
+                          <span className="text-3xl font-black text-white mono">{new Set(events.map(e => e.sourceIp)).size}</span>
+                       </div>
+                       <div className="flex flex-col">
+                          <span className="text-[9px] text-indigo-400 font-black mb-1 uppercase tracking-widest">THREAT_LEVEL</span>
+                          <span className={`text-[10px] font-black px-3 py-1 rounded-full mt-2 inline-block border ${threatLevel === 'Critical' ? 'bg-red-500/20 border-red-500/50 text-red-500' : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-500'}`}>
+                            {threatLevel.toUpperCase()}
+                          </span>
                        </div>
                     </div>
                  </div>
