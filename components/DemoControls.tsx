@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ScenarioType } from '../types';
 
-interface ScenarioConfig {
+interface AttackConfig {
   id: ScenarioType;
   label: string;
   icon: string;
@@ -10,42 +10,11 @@ interface ScenarioConfig {
   description: string;
 }
 
-const SCENARIOS: ScenarioConfig[] = [
-  { 
-    id: 'normal', 
-    label: 'HEALTHY FLOW', 
-    icon: '🟢', 
-    severity: 'NORMAL',
-    description: 'Baseline operations and authorized traffic.'
-  },
-  { 
-    id: 'brute_force', 
-    label: 'BRUTE FORCE', 
-    icon: '🔐', 
-    severity: 'HIGH',
-    description: 'Simulated credential stuffing on auth endpoints.'
-  },
-  { 
-    id: 'sql_injection', 
-    label: 'SQL ATTACK', 
-    icon: '💉', 
-    severity: 'CRITICAL',
-    description: 'Pattern-based injection targeting database layer.'
-  },
-  { 
-    id: 'ddos', 
-    label: 'DDOS BURST', 
-    icon: '🌊', 
-    severity: 'CRITICAL',
-    description: 'Massive UDP flood from distributed sources.'
-  },
-  { 
-    id: 'ransomware', 
-    label: 'RANSOMWARE', 
-    icon: '💀', 
-    severity: 'CRITICAL',
-    description: 'Bulk file encryption and lateral movement flags.'
-  }
+const ATTACKS: AttackConfig[] = [
+  { id: 'brute_force', label: 'BRUTE FORCE', icon: '🔐', severity: 'HIGH', description: 'Simulated credential stuffing' },
+  { id: 'sql_injection', label: 'SQL ATTACK', icon: '💉', severity: 'CRITICAL', description: 'Pattern-based injection' },
+  { id: 'ddos', label: 'DDOS BURST', icon: '🌊', severity: 'CRITICAL', description: 'Massive UDP flood' },
+  { id: 'ransomware', label: 'RANSOMWARE', icon: '💀', severity: 'CRITICAL', description: 'File encryption signal' }
 ];
 
 interface DemoControlsProps {
@@ -57,58 +26,66 @@ interface DemoControlsProps {
 }
 
 const DemoControls: React.FC<DemoControlsProps> = ({ isStreaming, setIsStreaming, scenario, setScenario, onReset }) => {
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [timer, setTimer] = useState(0);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [progress, setProgress] = useState(0);
+  
   const dragStart = useRef({ x: 0, y: 0 });
   const initialPos = useRef({ x: 0, y: 0 });
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Progress bar simulation for attacks
+  // Close dropdown on click outside
   useEffect(() => {
-    if (scenario === 'normal') {
-      setProgress(0);
-      return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Simulation Timer logic
+  useEffect(() => {
+    let interval: any;
+    if (scenario !== 'normal') {
+      interval = setInterval(() => setTimer(t => t + 1), 1000);
+    } else {
+      setTimer(0);
     }
-    
-    setProgress(0);
-    const interval = setInterval(() => {
-      setProgress(prev => (prev < 100 ? prev + 1 : 0));
-    }, 200);
-    
     return () => clearInterval(interval);
   }, [scenario]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('button')) return;
-
     setIsDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY };
     initialPos.current = { ...position };
-    e.preventDefault(); 
   };
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging) return;
-    const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
     setPosition({
-      x: initialPos.current.x + dx,
-      y: initialPos.current.y + dy
+      x: initialPos.current.x + (e.clientX - dragStart.current.x),
+      y: initialPos.current.y + (e.clientY - dragStart.current.y)
     });
   }, [isDragging]);
 
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
+  const handleMouseUp = useCallback(() => setIsDragging(false), []);
 
   useEffect(() => {
     if (isDragging) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
-    } else {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
     }
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
@@ -116,127 +93,135 @@ const DemoControls: React.FC<DemoControlsProps> = ({ isStreaming, setIsStreaming
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  const getButtonStyles = (s: ScenarioConfig) => {
-    const isActive = scenario === s.id;
-    if (!isActive) return 'bg-slate-800/40 text-slate-500 border-transparent hover:border-slate-700 hover:text-slate-300';
-    
-    switch (s.severity) {
-      case 'NORMAL': 
-        return 'bg-emerald-500 text-white shadow-[0_0_25px_rgba(16,185,129,0.4)] border-emerald-400/50';
-      case 'HIGH': 
-        return 'bg-orange-500 text-white shadow-[0_0_25px_rgba(249,115,22,0.4)] border-orange-400/50 animate-pulse';
-      case 'CRITICAL': 
-        return 'bg-red-600 text-white shadow-[0_0_30px_rgba(220,38,38,0.5)] border-red-400/50 animate-pulse';
-      default: 
-        return 'bg-indigo-600 text-white';
-    }
-  };
+  const currentAttack = ATTACKS.find(a => a.id === scenario);
+
+  if (isMinimized) {
+    return (
+      <div 
+        className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] cursor-pointer"
+        onClick={() => setIsMinimized(false)}
+      >
+        <div className="bg-indigo-600/90 backdrop-blur-xl px-6 py-3 rounded-full shadow-[0_0_30px_rgba(79,70,229,0.4)] border border-indigo-400/50 flex items-center gap-3 animate-bounce">
+          <div className="h-2 w-2 rounded-full bg-white animate-pulse" />
+          <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Restore CMND</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div 
       className="fixed z-[100] w-full max-w-fit px-4 pointer-events-none"
-      style={{ 
-        left: '50%', 
-        bottom: '32px', 
-        transform: `translate(calc(-50% + ${position.x}px), ${position.y}px)` 
-      }}
+      style={{ left: '50%', bottom: '32px', transform: `translate(calc(-50% + ${position.x}px), ${position.y}px)` }}
     >
       <div 
         onMouseDown={handleMouseDown}
-        className={`bg-[#0f172a]/95 backdrop-blur-3xl border border-slate-700/30 px-6 py-4 rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.8)] flex items-center gap-6 pointer-events-auto transition-all duration-300 ${
-          isDragging ? 'cursor-grabbing scale-[1.01] border-indigo-500/30' : 'cursor-default'
-        }`}
+        className={`bg-[#0f172a]/95 backdrop-blur-3xl border border-slate-700/40 px-6 py-4 rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.8)] flex items-center gap-5 pointer-events-auto transition-all ${isDragging ? 'cursor-grabbing scale-[1.01]' : 'cursor-default'}`}
       >
-        {/* LOGO & BRANDING */}
-        <div className="flex items-center gap-4 pr-6 border-r border-slate-800 shrink-0">
-          <div className="flex flex-col items-center gap-0.5 opacity-60">
-             <div className="grid grid-cols-2 gap-1">
-               <div className="h-1.5 w-1.5 bg-indigo-400 rounded-full" />
-               <div className="h-1.5 w-1.5 bg-indigo-400 rounded-full" />
-               <div className="h-1.5 w-1.5 bg-indigo-400 rounded-full" />
-               <div className="h-1.5 w-1.5 bg-indigo-400 rounded-full" />
-             </div>
-          </div>
+        {/* LOGO & MINIMIZE */}
+        <div className="flex items-center gap-3 pr-5 border-r border-slate-800">
+          <button 
+            onClick={() => setIsMinimized(true)}
+            className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M4 12h16"/></svg>
+          </button>
           <div className="flex flex-col">
-            <span className="text-[11px] font-black uppercase text-indigo-400 tracking-[0.2em] leading-none mb-1">SOC CMND</span>
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">PRESETS</span>
+            <span className="text-[10px] font-black uppercase text-indigo-400 tracking-[0.2em] leading-none mb-1">SOC_CMND</span>
+            <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest leading-none">V3.2.0</span>
           </div>
         </div>
 
-        {/* SCENARIO SELECTOR */}
+        {/* CORE SCENARIOS */}
         <div className="flex items-center gap-3">
-          {SCENARIOS.map((s) => (
-            <div key={s.id} className="relative group">
-              <button
-                onClick={() => setScenario(s.id)}
-                title={s.description}
-                className={`relative px-5 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300 flex flex-col items-center border ${getButtonStyles(s)}`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">{s.icon}</span>
-                  <span>{s.label}</span>
-                </div>
-                
-                {scenario === s.id && s.id !== 'normal' && (
-                  <div className="absolute -bottom-1 left-4 right-4 h-1 bg-black/20 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-white transition-all duration-200" 
-                      style={{ width: `${progress}%` }} 
-                    />
-                  </div>
-                )}
-              </button>
-              
-              {/* Tooltip hint on hover (visual only) */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 -translate-y-2 group-hover:translate-y-0">
-                <div className="bg-slate-900 border border-slate-700 px-3 py-2 rounded-xl shadow-2xl min-w-[150px] text-center">
-                  <p className="text-[8px] font-black text-indigo-400 uppercase tracking-widest mb-1">{s.severity} SEVERITY</p>
-                  <p className="text-[10px] text-white font-medium whitespace-nowrap">{s.description}</p>
-                </div>
-                <div className="w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45 mx-auto -mt-1" />
-              </div>
-
-              {scenario === s.id && (
-                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap">
-                   <span className={`text-[8px] font-black uppercase tracking-[0.2em] ${s.id === 'normal' ? 'text-emerald-500' : 'text-red-500 animate-pulse'}`}>
-                     ● ACTIVE_SIM
-                   </span>
-                </div>
-              )}
+          <button
+            onClick={() => { setScenario('normal'); setShowDropdown(false); }}
+            className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+              scenario === 'normal' 
+                ? 'bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)] border-emerald-400' 
+                : 'bg-slate-800/40 text-slate-500 border-transparent hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_5px_currentColor]" />
+              HEALTHY FLOW
             </div>
-          ))}
+          </button>
+
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowDropdown(!showDropdown)}
+              className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border flex items-center gap-3 ${
+                scenario !== 'normal' 
+                  ? 'bg-red-600 text-white shadow-[0_0_25px_rgba(220,38,38,0.4)] border-red-500 animate-pulse' 
+                  : 'bg-slate-800/40 text-slate-500 border-transparent hover:border-slate-700'
+              }`}
+            >
+              <span>{currentAttack ? `${currentAttack.icon} ${currentAttack.label}` : '🚨 TRIGGER ATTACK'}</span>
+              <svg className={`transition-transform duration-300 ${showDropdown ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+
+            {showDropdown && (
+              <div className="absolute bottom-full left-0 mb-4 w-64 bg-slate-900 border border-slate-700 rounded-3xl p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <div className="px-3 py-2 text-[8px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 mb-2">Select Attack Vector</div>
+                {ATTACKS.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => { setScenario(a.id); setShowDropdown(false); }}
+                    className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all hover:bg-slate-800 group ${scenario === a.id ? 'bg-slate-800' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">{a.icon}</span>
+                      <div className="text-left">
+                        <p className="text-[10px] font-black text-white uppercase tracking-widest">{a.label}</p>
+                        <p className="text-[8px] text-slate-500 font-bold">{a.description}</p>
+                      </div>
+                    </div>
+                    <div className={`h-1.5 w-1.5 rounded-full ${a.severity === 'CRITICAL' ? 'bg-red-500' : 'bg-orange-500'}`} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* ATTACK TELEMETRY (Timer) */}
+        {scenario !== 'normal' && (
+          <div className="flex items-center gap-4 pl-4 border-l border-slate-800">
+            <div className="flex flex-col items-center">
+               <span className="text-[8px] font-black text-red-500 uppercase tracking-widest mb-1">DURATION</span>
+               <span className="mono text-xs font-black text-white bg-red-950/40 px-2 py-0.5 rounded border border-red-500/20">{formatTime(timer)}</span>
+            </div>
+          </div>
+        )}
 
         <div className="h-10 w-px bg-slate-800" />
 
-        {/* SYSTEM ACTIONS */}
-        <div className="flex gap-3 pl-2">
+        {/* FEED CONTROLS */}
+        <div className="flex gap-2">
           <button 
             onClick={() => setIsStreaming(!isStreaming)}
-            className={`px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95 flex items-center gap-2 ${
+            className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 ${
               isStreaming 
-                ? 'bg-slate-800/40 text-white border-indigo-500/30' 
+                ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30' 
                 : 'bg-indigo-600 text-white border-transparent hover:bg-indigo-500'
             }`}
           >
-            {isStreaming ? (
-              <><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> STOP FEED</>
-            ) : (
-              <><span className="h-1.5 w-1.5 rounded-full bg-slate-400" /> START FEED</>
-            )}
+             <span className={`h-1.5 w-1.5 rounded-full ${isStreaming ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
+             {isStreaming ? 'FEED_LIVE' : 'FEED_PAUSED'}
           </button>
 
           <button 
-            onClick={onReset}
-            className="px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-800/40 text-slate-400 border border-transparent hover:border-slate-700 hover:text-white transition-all active:scale-95"
+            onClick={() => { onReset(); setTimer(0); setShowDropdown(false); }}
+            className="px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-slate-800/40 text-slate-400 border border-transparent hover:border-slate-700 hover:text-white transition-all"
           >
-            RESET
+            RESET_SYS
           </button>
         </div>
       </div>
       
-      <p className="text-[8px] text-slate-700 font-black uppercase tracking-[0.5em] text-center mt-6 opacity-60">
-        Advanced Command Interface v3.2 • Tactical Overlay • ThreatStream OS
+      <p className="text-[7px] text-slate-700 font-black uppercase tracking-[0.5em] text-center mt-6 opacity-40">
+        Advanced Command Interface • Tactical Overlay • Gemini Security Engine
       </p>
     </div>
   );
