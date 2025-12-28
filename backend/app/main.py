@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.encoders import jsonable_encoder
 import uvicorn
 
 from app.config import settings
@@ -15,6 +16,7 @@ from app.api.websocket.manager import get_connection_manager
 from app.api.websocket.handlers import WebSocketHandler
 from app.services.threat_processor import get_threat_processor
 from app.services.metrics_service import get_metrics_service
+from app.core.kafka_producer import get_producer
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -159,49 +161,32 @@ async def simulate_event(event_data: dict):
     """
     Simulate processing a security event (for testing).
 
+    Publishes raw event to security.raw.logs topic, which is then
+    consumed and processed by the Kafka consumer pipeline.
+
     Args:
         event_data: Security event data
 
     Returns:
-        Processing result
+        Acknowledgment
     """
     try:
-        # Process the event through the pipeline
-        await threat_processor.process_event(event_data)
+        # Get Kafka producer
+        producer = get_producer()
 
-        # Get the latest threat
-        from app.services.firestore_service import get_firestore_service
-        db = get_firestore_service()
-        recent_threats = await db.get_recent_threats(limit=1)
+        # Publish raw event to security.raw.logs topic
+        # This simulates external systems sending raw logs to Kafka
+        if producer:
+            producer.produce_threat(event_data, settings.kafka_raw_topic)
+            logger.info(f"📝 Published raw event to Kafka topic: {settings.kafka_raw_topic}")
+        else:
+            logger.warning("Kafka producer not available - event not published")
+            return {"status": "error", "message": "Kafka producer not available"}
 
-        if recent_threats:
-            threat = recent_threats[0]
-
-            # Broadcast to WebSocket clients
-            await ws_manager.broadcast({
-                "type": "new_threat",
-                "data": threat
-            })
-
-            # If high/critical severity, also broadcast as alert
-            if threat.get("severity") in ["CRITICAL", "HIGH"]:
-                await ws_manager.broadcast({
-                    "type": "new_alert",
-                    "data": {
-                        "id": f"ALT-{threat['id']}",
-                        "threat_id": threat['id'],
-                        "severity": threat['severity'],
-                        "description": threat['description']
-                    }
-                })
-
-            return {
-                "status": "success",
-                "threat": threat,
-                "message": "Event processed successfully"
-            }
-
-        return {"status": "success", "message": "Event processed"}
+        return {
+            "status": "success",
+            "message": "Event published to Kafka successfully"
+        }
 
     except Exception as e:
         logger.error(f"Error simulating event: {e}")

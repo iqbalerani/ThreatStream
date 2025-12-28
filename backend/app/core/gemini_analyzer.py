@@ -162,13 +162,34 @@ IMPORTANT:
             "login_attempt": SeverityLevel.INFO,
             "api_request": SeverityLevel.INFO,
             "firewall_event": SeverityLevel.INFO,
+            "normal_traffic": SeverityLevel.INFO,
+            "data_access": SeverityLevel.INFO,
+            "network_traffic": SeverityLevel.INFO,
+        }
+
+        # Map event types to threat types
+        threat_type_map = {
+            "brute_force": ThreatType.BRUTE_FORCE,
+            "sql_injection": ThreatType.SQL_INJECTION,
+            "ddos": ThreatType.DDOS_ATTACK,
+            "ransomware": ThreatType.RANSOMWARE,
+            "malware": ThreatType.MALWARE,
+            "port_scan": ThreatType.PORT_SCAN,
+            "authentication": ThreatType.AUTHENTICATION,
+            "login_attempt": ThreatType.AUTHENTICATION,
+            "api_request": ThreatType.API_REQUEST,
+            "firewall_event": ThreatType.FIREWALL_EVENT,
+            "normal_traffic": ThreatType.NORMAL_TRAFFIC,
+            "data_access": ThreatType.API_REQUEST,
+            "network_traffic": ThreatType.NETWORK_ANOMALY,
         }
 
         severity = severity_map.get(event_type, SeverityLevel.MEDIUM)
+        threat_type = threat_type_map.get(event_type, ThreatType.AUTHENTICATION)
 
         return GeminiAnalysis(
             severity=severity,
-            threat_type=ThreatType.AUTHENTICATION,
+            threat_type=threat_type,
             confidence=0.5,
             description=f"Event detected: {event_type}",
             contextual_analysis="Fallback analysis - AI engine temporarily unavailable",

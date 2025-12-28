@@ -3,10 +3,11 @@ Real-time Metrics Service
 Aggregates and tracks system performance metrics
 """
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 from app.models.threat import Threat, RiskLevel
 from app.models.analytics import TimelineData
+from app.core.kafka_producer import get_producer
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -32,6 +33,9 @@ class MetricsService:
         # Current risk index
         self.current_risk_index = 10
         self.risk_trend = "STABLE"
+
+        # Kafka producer for publishing metrics
+        self.producer = get_producer()
 
         logger.info("MetricsService initialized")
 
@@ -97,10 +101,13 @@ class MetricsService:
         }
 
     async def start_aggregation(self):
-        """Start background metrics aggregation task."""
+        """Start background metrics aggregation and publishing task."""
         while True:
             await asyncio.sleep(30)  # Update every 30 seconds
             self._decay_risk_index()
+
+            # Publish metrics snapshot to Kafka
+            await self._publish_metrics_snapshot()
 
     def _calculate_risk_contribution(self, threat: Threat) -> float:
         """Calculate how much a threat contributes to risk index."""
@@ -134,6 +141,31 @@ class MetricsService:
             return "ELEVATED"
         else:
             return "NORMAL"
+
+    async def _publish_metrics_snapshot(self):
+        """Publish current metrics snapshot to Kafka."""
+        if not self.producer:
+            return
+
+        # Build metrics snapshot
+        dashboard_stats = self.get_dashboard_stats()
+        risk_index = self.get_current_risk_index()
+
+        metrics_snapshot = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "dashboard_stats": dashboard_stats,
+            "risk_index": risk_index,
+            "system_health": {
+                "events_processed": self.events_processed,
+                "threats_detected": self.threats_detected,
+                "alerts_generated": self.alerts_generated,
+                "events_blocked": self.events_blocked
+            }
+        }
+
+        # Publish to Kafka
+        self.producer.produce_metrics(metrics_snapshot)
+        logger.info(f"📊 Published metrics snapshot to Kafka - Risk: {risk_index['value']}, Processed: {self.events_processed}")
 
 
 # Global instance

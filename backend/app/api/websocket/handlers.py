@@ -3,7 +3,9 @@ WebSocket Message Handlers
 Handles WebSocket messages and sends initial state
 """
 from typing import Dict, Any
+from datetime import datetime
 from fastapi import WebSocket
+from fastapi.encoders import jsonable_encoder
 from app.api.websocket.manager import ConnectionManager
 from app.services.firestore_service import get_firestore_service
 from app.services.metrics_service import get_metrics_service
@@ -35,8 +37,8 @@ class WebSocketHandler:
             risk_index = self.metrics.get_current_risk_index()
             risk_timeline = self.metrics.get_risk_timeline()
 
-            # Send initial state
-            await self.manager.send_to_client(self.websocket, {
+            # Prepare message with JSON-serializable data
+            message = {
                 "type": "initial_state",
                 "data": {
                     "threats": recent_threats,
@@ -45,7 +47,13 @@ class WebSocketHandler:
                     "risk_index": risk_index,
                     "risk_timeline": risk_timeline
                 }
-            })
+            }
+
+            # Convert to JSON-serializable format (handles datetime, etc.)
+            serializable_message = jsonable_encoder(message)
+
+            # Send initial state
+            await self.manager.send_to_client(self.websocket, serializable_message)
 
             logger.debug("Sent initial state to client")
 

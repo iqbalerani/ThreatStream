@@ -66,6 +66,10 @@ class ThreatStreamProducer:
         """Publish a critical alert to Kafka."""
         self.produce_threat(alert_data, settings.kafka_alerts_topic)
 
+    def produce_metrics(self, metrics_data: Dict[str, Any]):
+        """Publish system metrics to Kafka."""
+        self.produce_threat(metrics_data, settings.kafka_metrics_topic)
+
     def flush(self):
         """Flush any pending messages."""
         if self.producer:

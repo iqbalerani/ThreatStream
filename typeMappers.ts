@@ -189,12 +189,21 @@ export function createSimulationEvent(scenario: string): any {
     normal: {
       event_id: eventId,
       timestamp,
-      event_type: 'normal_traffic',
-      source_ip: `10.0.0.${Math.floor(Math.random() * 255)}`,
-      destination_ip: '10.0.0.1',
-      destination_port: 443,
-      protocol: 'HTTPS',
-      payload: { bytes: Math.floor(Math.random() * 1000) },
+      event_type: (() => {
+        const normalTypes = ['api_request', 'login_attempt', 'firewall_event', 'normal_traffic', 'data_access', 'network_traffic'];
+        return normalTypes[Math.floor(Math.random() * normalTypes.length)];
+      })(),
+      source_ip: `10.0.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 255)}`,
+      destination_ip: `10.0.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 255)}`,
+      destination_port: (() => {
+        const ports = [80, 443, 22, 3306, 5432, 8080];
+        return ports[Math.floor(Math.random() * ports.length)];
+      })(),
+      protocol: (() => {
+        const protocols = ['HTTPS', 'HTTP', 'SSH', 'TCP', 'UDP'];
+        return protocols[Math.floor(Math.random() * protocols.length)];
+      })(),
+      payload: { bytes: Math.floor(Math.random() * 5000) + 100 },
       metadata: { scenario: 'normal' }
     }
   };

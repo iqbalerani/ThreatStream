@@ -127,7 +127,7 @@ const App: React.FC = () => {
 
   // Scenario simulation - send events to backend when scenario changes
   useEffect(() => {
-    if (!isStreaming || scenario === 'normal') return;
+    if (!isStreaming) return;
 
     const interval = setInterval(async () => {
       try {
@@ -136,7 +136,7 @@ const App: React.FC = () => {
       } catch (error) {
         console.error('Error simulating event:', error);
       }
-    }, 400);
+    }, 1500);
 
     return () => clearInterval(interval);
   }, [isStreaming, scenario]);

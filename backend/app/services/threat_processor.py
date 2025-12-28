@@ -6,12 +6,15 @@ import uuid
 import time
 from datetime import datetime, timezone
 from typing import Dict, Any
+from fastapi.encoders import jsonable_encoder
 from app.core.gemini_analyzer import GeminiThreatAnalyzer
+from app.core.kafka_producer import get_producer
 from app.models.threat import Threat, SecurityEvent, SeverityLevel
 from app.services.geo_service import get_geo_service
 from app.services.firestore_service import get_firestore_service
 from app.services.metrics_service import get_metrics_service
 from app.services.alert_service import get_alert_service
+from app.api.websocket.manager import get_connection_manager
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,6 +29,8 @@ class ThreatProcessor:
         self.db = get_firestore_service()
         self.metrics = get_metrics_service()
         self.alerts = get_alert_service()
+        self.producer = get_producer()
+        self.ws_manager = get_connection_manager()
 
         self.events_processed = 0
         self.threats_detected = 0
@@ -99,6 +104,18 @@ class ThreatProcessor:
             # Step 6: Store in database
             await self.db.store_threat(threat)
 
+            # Step 6.5: Publish analyzed threat to Kafka
+            if self.producer:
+                threat_dict = threat.model_dump()
+                self.producer.produce_threat(threat_dict)
+                logger.info(f"📡 Published threat {threat.id} to Kafka topic: security.analyzed.threats")
+
+            # Step 6.6: Broadcast to WebSocket clients
+            await self.ws_manager.broadcast(jsonable_encoder({
+                "type": "new_threat",
+                "data": threat.model_dump()
+            }))
+
             # Step 7: Update metrics
             await self.metrics.record_event_processed()
 
@@ -113,6 +130,18 @@ class ThreatProcessor:
                 alert = await self.alerts.create_alert(threat)
                 self.alerts_created += 1
                 await self.metrics.record_alert()
+
+                # Publish critical alert to Kafka alerts topic
+                if self.producer:
+                    alert_dict = alert.model_dump()
+                    self.producer.produce_alert(alert_dict)
+                    logger.info(f"📢 Published alert {alert.id} to Kafka topic: security.critical.alerts")
+
+                # Broadcast alert to WebSocket clients
+                await self.ws_manager.broadcast(jsonable_encoder({
+                    "type": "new_alert",
+                    "data": alert.model_dump()
+                }))
 
             # Step 9: Log high-severity threats
             if analysis.severity in [SeverityLevel.CRITICAL, SeverityLevel.HIGH]:

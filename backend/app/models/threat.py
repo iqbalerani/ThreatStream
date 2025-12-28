@@ -43,6 +43,7 @@ class ThreatType(str, Enum):
     API_REQUEST = "API_REQUEST"          # API security events
     LOGIN_ATTEMPT = "LOGIN_ATTEMPT"      # Login events
     NORMAL_TRAFFIC = "NORMAL_TRAFFIC"    # Benign traffic
+    NETWORK_ANOMALY = "NETWORK_ANOMALY"  # Network anomalies
 
 
 class RiskLevel(str, Enum):
