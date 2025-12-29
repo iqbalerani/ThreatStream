@@ -1,0 +1,43 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output (will be regenerated)
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment (will be created during build)
+.env
+.env.local
+.env.*.local
+
+# Testing
+coverage/
+
+# Documentation
+*.md
+docs/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Backend
+backend/
+
+# Cloud
+.gcloudignore
+
+# Misc
+.claude/
+assets/
