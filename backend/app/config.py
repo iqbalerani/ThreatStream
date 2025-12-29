@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     kafka_analyzed_topic: str = Field(default="security.analyzed.threats")
     kafka_alerts_topic: str = Field(default="security.critical.alerts")
     kafka_metrics_topic: str = Field(default="security.system.metrics")
+    kafka_risk_index_topic: str = Field(default="risk_index")
     kafka_consumer_group: str = Field(default="threatstream-processor-group")
     kafka_auto_offset_reset: str = Field(default="latest")
     kafka_enable_auto_commit: bool = Field(default=False)
@@ -37,12 +38,16 @@ class Settings(BaseSettings):
     google_application_credentials: str = Field(default="")
     gcp_region: str = Field(default="us-central1")
 
-    # Gemini
+    # Gemini (Legacy - kept for fallback)
     gemini_api_key: str = Field(default="")
     gemini_model: str = Field(default="gemini-1.5-flash")
     gemini_temperature: float = Field(default=0.1)
     gemini_max_tokens: int = Field(default=2048)
     gemini_rate_limit: int = Field(default=60)
+
+    # OpenRouter (Primary AI Provider)
+    openrouter_api_key: str = Field(default="")
+    openrouter_model: str = Field(default="google/gemini-2.0-flash-exp:free")
 
     # Firestore Collections
     firestore_database: str = Field(default="(default)")
@@ -66,6 +71,10 @@ class Settings(BaseSettings):
     threat_batch_size: int = Field(default=100)
     threat_processing_interval: float = Field(default=0.1)
     ai_analysis_threshold: str = Field(default="MEDIUM")
+
+    # Risk Index Publishing
+    risk_change_threshold: int = Field(default=1)  # Minimum change to publish
+    risk_heartbeat_interval: int = Field(default=10)  # Seconds between heartbeats
 
     # Simulation
     simulation_enabled: bool = Field(default=True)

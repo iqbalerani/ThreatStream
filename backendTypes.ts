@@ -121,6 +121,7 @@ export type BackendWebSocketMessage =
   | BackendNewAlertMessage
   | BackendMetricsUpdateMessage
   | BackendRiskUpdateMessage
+  | BackendRiskTimelineUpdateMessage
   | BackendHeartbeatMessage;
 
 export interface BackendInitialStateMessage {
@@ -130,6 +131,7 @@ export interface BackendInitialStateMessage {
     alerts: BackendAlert[];
     risk_index: BackendRiskIndex;
     stats: BackendDashboardStats;
+    risk_timeline?: Array<{ time: string; risk: number }>;
   };
 }
 
@@ -151,6 +153,15 @@ export interface BackendMetricsUpdateMessage {
 export interface BackendRiskUpdateMessage {
   type: 'risk_update';
   data: BackendRiskIndex;
+}
+
+export interface BackendRiskTimelineUpdateMessage {
+  type: 'risk_timeline_update';
+  data: {
+    time: string;          // "22:50:19"
+    risk: number;          // 39
+    timestamp: string;     // ISO format
+  };
 }
 
 export interface BackendHeartbeatMessage {

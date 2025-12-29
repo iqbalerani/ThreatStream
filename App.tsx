@@ -46,6 +46,7 @@ const App: React.FC = () => {
   const [showLiveStream, setShowLiveStream] = useState(false);
   const [timeline, setTimeline] = useState<TimelineData[]>([]);
   const [scenario, setScenario] = useState<ScenarioType>('normal');
+  const [scenarioId, setScenarioId] = useState<number>(Date.now()); // Scenario epoch for state-aware streaming
   const [mitigationActive, setMitigationActive] = useState(false);
   const [playbookStep, setPlaybookStep] = useState<string | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
@@ -58,6 +59,7 @@ const App: React.FC = () => {
 
   const eventIdCounter = useRef(0);
   const lastAnalysisRef = useRef(0);
+  const lastAnalyzedLevelRef = useRef<ThreatLevel>(ThreatLevel.NORMAL);
   const wsRef = useRef(getWebSocketService());
 
   // WebSocket connection and message handling
@@ -66,6 +68,17 @@ const App: React.FC = () => {
 
     // Connect to backend WebSocket
     ws.connect();
+
+    // Handle WebSocket status changes
+    const unsubscribeStatus = ws.onStatus((status) => {
+      console.log('WebSocket status:', status);
+      setIsStreaming(status === 'connected');
+
+      // Send handshake with current scenario epoch when connection established
+      if (status === 'connected') {
+        ws.sendHandshake(scenarioId);
+      }
+    });
 
     // Handle WebSocket messages
     const unsubscribeMessages = ws.onMessage((message: BackendWebSocketMessage) => {
@@ -79,14 +92,38 @@ const App: React.FC = () => {
             setStats(mapBackendDashboardStatsToFrontend(message.data.stats));
           }
           if (message.data.risk_index) {
-            setRiskScore(message.data.risk_index.value);
+            const backendRisk = message.data.risk_index.value;
+
+            // If in normal scenario and backend has stale high risk, reset to baseline
+            const currentRisk = (scenario === 'normal' && backendRisk > 10) ? 5 : backendRisk;
+
+            setRiskScore(currentRisk);
+
+            // Initialize timeline with current risk (30 points for smooth chart)
+            const now = new Date();
+            const initialTimeline = Array.from({ length: 30 }, (_, i) => {
+              const time = new Date(now.getTime() - (29 - i) * 1000);
+              return {
+                time: `${time.getHours()}:${time.getMinutes()}:${time.getSeconds()}`,
+                risk: currentRisk
+              };
+            });
+            setTimeline(initialTimeline);
+
+            console.debug('[Timeline Init] Scenario:', scenario, 'Backend risk:', backendRisk, 'Initialized at:', currentRisk);
           }
           break;
 
         case 'new_threat':
-          // Add new threat to event stream
+          // Add new threat to event stream (with deduplication)
           const newEvent = mapBackendThreatToSecurityEvent(message.data);
-          setEvents(prev => [newEvent, ...prev].slice(0, 50));
+          setEvents(prev => {
+            // Deduplicate: only add if event ID doesn't already exist
+            if (prev.some(e => e.id === newEvent.id)) {
+              return prev;
+            }
+            return [newEvent, ...prev].slice(0, 50);
+          });
 
           // Update risk score based on threat severity
           if (message.data.risk_score) {
@@ -108,13 +145,19 @@ const App: React.FC = () => {
           // Update risk score
           setRiskScore(message.data.value);
           break;
-      }
-    });
 
-    // Handle WebSocket status changes
-    const unsubscribeStatus = ws.onStatus((status) => {
-      console.log('WebSocket status:', status);
-      setIsStreaming(status === 'connected');
+        case 'risk_timeline_update':
+          // Real-time timeline update from Kafka stream
+          // This provides smooth, time-based visualization of risk propagation
+          setTimeline(prev =>
+            [...prev, {
+              time: message.data.time,
+              risk: message.data.risk
+            }].slice(-30)  // Keep last 30 points (sliding window ~1-5 min history)
+          );
+          console.debug('[Timeline Update] Kafka stream:', message.data.time, 'Risk:', message.data.risk);
+          break;
+      }
     });
 
     // Cleanup on unmount
@@ -123,7 +166,28 @@ const App: React.FC = () => {
       unsubscribeStatus();
       ws.disconnect();
     };
-  }, []);
+  }, []); // Empty dependency - WebSocket connection stays stable
+
+  // Send new handshake when scenario changes (without reconnecting WebSocket)
+  useEffect(() => {
+    const ws = wsRef.current;
+    if (ws.getStatus() === 'connected') {
+      ws.sendHandshake(scenarioId);
+    }
+  }, [scenarioId]);
+
+  // Generate new scenario ID when scenario changes (state-aware streaming epoch)
+  useEffect(() => {
+    const newScenarioId = Date.now();
+    setScenarioId(newScenarioId);
+
+    // Clear old events when switching to normal for clean UX transition
+    if (scenario === 'normal') {
+      setEvents(prev => prev.slice(0, 3)); // Keep last 3 events for visual transition
+    }
+
+    console.log(`📌 Scenario changed to: ${scenario}, new epoch: ${newScenarioId}`);
+  }, [scenario]);
 
   // Scenario simulation - send events to backend when scenario changes
   useEffect(() => {
@@ -131,7 +195,7 @@ const App: React.FC = () => {
 
     const interval = setInterval(async () => {
       try {
-        const eventData = createSimulationEvent(scenario);
+        const eventData = createSimulationEvent(scenario, scenarioId);
         await BackendService.simulateEvent(eventData);
       } catch (error) {
         console.error('Error simulating event:', error);
@@ -139,32 +203,82 @@ const App: React.FC = () => {
     }, 1500);
 
     return () => clearInterval(interval);
-  }, [isStreaming, scenario]);
+  }, [isStreaming, scenario, scenarioId]);
 
+  // Update threat level based on risk score
   useEffect(() => {
     if (riskScore > 65) setThreatLevel(ThreatLevel.CRITICAL);
     else if (riskScore > 35) setThreatLevel(ThreatLevel.SUSPICIOUS);
     else setThreatLevel(ThreatLevel.NORMAL);
-
-    const now = new Date();
-    const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
-    setTimeline(prev => [...prev, { time: timeStr, risk: riskScore }].slice(-30));
   }, [riskScore]);
 
+  // Timeline updates now come from Kafka via WebSocket (risk_timeline_update messages)
+  // This ensures timeline reflects real Kafka stream, not derived frontend state
+
   useEffect(() => {
-    if (threatLevel !== ThreatLevel.NORMAL && (Date.now() - lastAnalysisRef.current > 15000) && !isAnalyzing) {
-      lastAnalysisRef.current = Date.now();
-      const criticalEvents = events.filter(e => e.severity === Severity.CRITICAL).slice(0, 5);
-      if (criticalEvents.length > 0) {
-        setIsAnalyzing(true);
-        analyzeThreat(criticalEvents).then((res) => {
-          setAiReasoning(res);
-          setIsAnalyzing(false);
-        }).catch(() => setIsAnalyzing(false));
+    const now = Date.now();
+    const timeSinceLastAnalysis = now - lastAnalysisRef.current;
+    const cooldownRemaining = Math.max(0, 120000 - timeSinceLastAnalysis);
+
+    console.debug('[AI Trigger] Effect fired:', {
+      threatLevel,
+      lastAnalyzedLevel: lastAnalyzedLevelRef.current,
+      isAnalyzing,
+      timeSinceLastAnalysis: Math.round(timeSinceLastAnalysis / 1000) + 's',
+      cooldownRemaining: Math.round(cooldownRemaining / 1000) + 's',
+      eventCount: events.length
+    });
+
+    if (threatLevel !== ThreatLevel.NORMAL && !isAnalyzing) {
+      const highPriorityEvents = events.filter(e =>
+        e.severity === Severity.CRITICAL || e.severity === Severity.HIGH
+      ).slice(0, 5);
+
+      console.debug('[AI Trigger] High priority events found:', highPriorityEvents.length);
+
+      if (highPriorityEvents.length > 0) {
+        const levelChanged = threatLevel !== lastAnalyzedLevelRef.current;
+        const cooldownExpired = timeSinceLastAnalysis > 120000;
+        const isCritical = threatLevel === ThreatLevel.CRITICAL;
+
+        console.debug('[AI Trigger] Analysis conditions:', {
+          levelChanged,
+          cooldownExpired,
+          isCritical,
+          lastAnalyzedLevel: lastAnalyzedLevelRef.current,
+          currentLevel: threatLevel
+        });
+
+        // Analyze if:
+        // 1. Threat level changed (NORMAL → SUSPICIOUS or SUSPICIOUS → CRITICAL)
+        // 2. At SUSPICIOUS: cooldown expired (120s)
+        // 3. At CRITICAL: level just changed to CRITICAL
+        const shouldAnalyze = levelChanged || (cooldownExpired && !isCritical);
+
+        console.debug('[AI Trigger] Should analyze:', shouldAnalyze);
+
+        if (shouldAnalyze) {
+          console.debug('[AI Trigger] 🧠 Starting AI analysis at level:', threatLevel);
+          lastAnalysisRef.current = now;
+          lastAnalyzedLevelRef.current = threatLevel;
+          setIsAnalyzing(true);
+          analyzeThreat(highPriorityEvents).then((res) => {
+            console.debug('[AI Trigger] ✅ AI analysis complete');
+            setAiReasoning(res);
+            setIsAnalyzing(false);
+          }).catch((err) => {
+            console.error('[AI Trigger] ❌ AI analysis failed:', err);
+            setIsAnalyzing(false);
+          });
+        }
       }
-    } else if (threatLevel === ThreatLevel.NORMAL && aiReasoning.summary !== INITIAL_REASONING.summary) {
-      setAiReasoning(INITIAL_REASONING);
-      setMitigationActive(false);
+    } else if (threatLevel === ThreatLevel.NORMAL) {
+      if (aiReasoning.summary !== INITIAL_REASONING.summary) {
+        console.debug('[AI Trigger] 🔄 Resetting to normal state');
+        setAiReasoning(INITIAL_REASONING);
+        setMitigationActive(false);
+        lastAnalyzedLevelRef.current = ThreatLevel.NORMAL;
+      }
     }
   }, [threatLevel, events, aiReasoning.summary, isAnalyzing]);
 
@@ -176,6 +290,10 @@ const App: React.FC = () => {
     setAiReasoning(INITIAL_REASONING);
     setMitigationActive(false);
     setPlaybookStep(null);
+    lastAnalysisRef.current = 0;
+    lastAnalyzedLevelRef.current = ThreatLevel.NORMAL;
+
+    console.debug('[AI Trigger] 🔄 System reset');
 
     // Reconnect to WebSocket to get fresh state
     const ws = wsRef.current;
@@ -204,8 +322,8 @@ const App: React.FC = () => {
         <StatsBar stats={stats} />
       </div>
 
-      <main className="flex-1 p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-[1920px] mx-auto w-full pb-40">
-        <Dashboard 
+      <main className={`flex-1 p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-[1920px] mx-auto w-full transition-all duration-300 ${scenario !== 'normal' ? 'pb-56' : 'pb-40'}`}>
+        <Dashboard
           events={events}
           riskScore={riskScore}
           threatLevel={threatLevel}

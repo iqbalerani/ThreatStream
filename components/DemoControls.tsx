@@ -135,11 +135,16 @@ const DemoControls: React.FC<DemoControlsProps> = ({ isStreaming, setIsStreaming
         {/* CORE SCENARIOS */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => { setScenario('normal'); setShowDropdown(false); }}
+            onClick={() => {
+              if (scenario === 'normal') return; // Already normal
+              setScenario('normal');
+              setShowDropdown(false);
+            }}
+            disabled={scenario !== 'normal'}
             className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${
-              scenario === 'normal' 
-                ? 'bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)] border-emerald-400' 
-                : 'bg-slate-800/40 text-slate-500 border-transparent hover:border-slate-700'
+              scenario === 'normal'
+                ? 'bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)] border-emerald-400'
+                : 'bg-slate-800/20 text-slate-600 border-slate-800/50 cursor-not-allowed opacity-50'
             }`}
           >
             <div className="flex items-center gap-2">
@@ -183,6 +188,21 @@ const DemoControls: React.FC<DemoControlsProps> = ({ isStreaming, setIsStreaming
               </div>
             )}
           </div>
+
+          {/* STOP SIMULATE ATTACK BUTTON */}
+          {scenario !== 'normal' && (
+            <button
+              onClick={() => {
+                setScenario('normal');
+                setShowDropdown(false);
+                setTimer(0);
+              }}
+              className="px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-orange-600 text-white border border-orange-500 shadow-[0_0_25px_rgba(234,88,12,0.4)] hover:bg-orange-500 transition-all animate-pulse flex items-center gap-2"
+            >
+              <span>⏹</span>
+              STOP ATTACK
+            </button>
+          )}
         </div>
 
         {/* ATTACK TELEMETRY (Timer) */}

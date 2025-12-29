@@ -1,10 +1,10 @@
 """
-Google Gemini AI Threat Analyzer
+AI Threat Analyzer using OpenRouter (Gemini 2.5 Flash)
 """
 import json
 import asyncio
 from typing import Dict, Any
-from google import generativeai as genai
+import httpx
 from app.config import settings
 from app.models.threat import GeminiAnalysis, SeverityLevel, ThreatType
 from app.utils.logger import get_logger
@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 
 class GeminiThreatAnalyzer:
     """
-    AI-powered threat analyzer using Google Gemini.
+    AI-powered threat analyzer using OpenRouter with Gemini 2.5 Flash.
 
     Provides:
     - Threat severity classification
@@ -25,26 +25,18 @@ class GeminiThreatAnalyzer:
     """
 
     def __init__(self):
-        # Configure Gemini
-        if settings.gemini_api_key:
-            genai.configure(api_key=settings.gemini_api_key)
+        self.openrouter_api_key = settings.openrouter_api_key
+        self.model = settings.openrouter_model
+        self.base_url = "https://openrouter.ai/api/v1/chat/completions"
 
-            self.model = genai.GenerativeModel(
-                model_name=settings.gemini_model,
-                generation_config={
-                    "temperature": settings.gemini_temperature,
-                    "max_output_tokens": settings.gemini_max_tokens,
-                }
-            )
+        # Rate limiting
+        self._semaphore = asyncio.Semaphore(settings.gemini_rate_limit)
+        self._request_count = 0
 
-            # Rate limiting
-            self._semaphore = asyncio.Semaphore(settings.gemini_rate_limit)
-            self._request_count = 0
-
-            logger.info(f"Gemini Analyzer initialized: {settings.gemini_model}")
+        if self.openrouter_api_key:
+            logger.info(f"Gemini Analyzer initialized via OpenRouter: {self.model}")
         else:
-            self.model = None
-            logger.warning("Gemini API key not configured - using fallback analysis")
+            logger.warning("OpenRouter API key not configured - using fallback analysis")
 
     def _build_analysis_prompt(self, event: Dict[str, Any]) -> str:
         """Build the analysis prompt for Gemini."""
@@ -80,11 +72,12 @@ IMPORTANT:
 - Include specific IOCs in contributing_signals
 - Provide actionable recommendations
 - Map to MITRE ATT&CK when applicable
-"""
+
+Respond ONLY with the JSON, no markdown formatting."""
 
     async def analyze(self, event: Dict[str, Any]) -> GeminiAnalysis:
         """
-        Analyze a security event using Gemini AI.
+        Analyze a security event using Gemini AI via OpenRouter.
 
         Args:
             event: Raw security event data
@@ -92,7 +85,12 @@ IMPORTANT:
         Returns:
             GeminiAnalysis with complete threat intelligence
         """
-        if not self.model:
+        # Check if this is a normal/healthy flow simulation - skip AI analysis
+        metadata = event.get("metadata", {})
+        if metadata.get("scenario") == "normal":
+            return self._fallback_analysis(event, force_normal=True)
+
+        if not self.openrouter_api_key:
             return self._fallback_analysis(event)
 
         async with self._semaphore:
@@ -101,14 +99,38 @@ IMPORTANT:
 
                 prompt = self._build_analysis_prompt(event)
 
-                # Generate analysis
-                response = await asyncio.to_thread(
-                    self.model.generate_content,
-                    prompt
-                )
+                # Prepare OpenRouter API request
+                headers = {
+                    "Authorization": f"Bearer {self.openrouter_api_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://threatstream.app",  # Optional but recommended
+                    "X-Title": "ThreatStream Security Platform"  # Optional but recommended
+                }
 
-                # Parse JSON response
-                response_text = response.text
+                payload = {
+                    "model": self.model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    "temperature": settings.gemini_temperature,
+                    "max_tokens": settings.gemini_max_tokens,
+                }
+
+                # Make async HTTP request to OpenRouter
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        self.base_url,
+                        headers=headers,
+                        json=payload
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+
+                # Extract the response
+                response_text = result["choices"][0]["message"]["content"]
 
                 # Handle markdown code blocks
                 if "```json" in response_text:
@@ -135,20 +157,40 @@ IMPORTANT:
                     recommended_actions=analysis_dict["recommended_actions"],
                     mitre_attack_id=mitre_id,
                     mitre_attack_name=mitre_name,
-                    audit_ref="GEMINI-PRO-ENGINE"
+                    audit_ref="OPENROUTER-GEMINI-2.5-FLASH"
                 )
 
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse Gemini response: {e}")
+                logger.error(f"Failed to parse AI response: {e}")
+                logger.error(f"Response text: {response_text if 'response_text' in locals() else 'N/A'}")
+                return self._fallback_analysis(event)
+
+            except httpx.HTTPStatusError as e:
+                logger.error(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")
                 return self._fallback_analysis(event)
 
             except Exception as e:
-                logger.error(f"Gemini analysis error: {e}")
+                logger.error(f"AI analysis error: {e}")
                 return self._fallback_analysis(event)
 
-    def _fallback_analysis(self, event: Dict[str, Any]) -> GeminiAnalysis:
+    def _fallback_analysis(self, event: Dict[str, Any], force_normal: bool = False) -> GeminiAnalysis:
         """Provide rule-based fallback analysis when AI is unavailable."""
         event_type = event.get("event_type", "unknown").lower()
+
+        # Force normal traffic classification for healthy flow scenarios
+        if force_normal:
+            return GeminiAnalysis(
+                severity=SeverityLevel.INFO,
+                threat_type=ThreatType.NORMAL_TRAFFIC,
+                confidence=0.95,
+                description=f"Normal {event_type.replace('_', ' ')} activity",
+                contextual_analysis="Routine operation - baseline network activity within normal parameters",
+                contributing_signals=["Standard traffic pattern", "Known source", "Expected behavior"],
+                recommended_actions=["Continue monitoring", "No action required"],
+                mitre_attack_id=None,
+                mitre_attack_name=None,
+                audit_ref="HEALTHY-FLOW"
+            )
 
         # Simple rule-based severity mapping
         severity_map = {
@@ -203,7 +245,8 @@ IMPORTANT:
     def get_metrics(self) -> Dict:
         """Get analyzer metrics for monitoring."""
         return {
-            "model": settings.gemini_model,
+            "model": self.model,
             "requests_processed": self._request_count,
-            "rate_limit": settings.gemini_rate_limit
+            "rate_limit": settings.gemini_rate_limit,
+            "provider": "OpenRouter"
         }

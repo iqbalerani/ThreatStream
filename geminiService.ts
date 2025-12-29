@@ -1,107 +1,103 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
 import { SecurityEvent, AIReasoning, ForensicReport } from "./types";
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:8000';
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 export const analyzeThreat = async (events: SecurityEvent[], retryCount = 0): Promise<AIReasoning> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-  const model = 'gemini-3-flash-preview';
-  
-  const eventContext = events.map(e => ({
-    time: e.timestamp.toISOString(),
-    type: e.type,
-    ip: e.sourceIp,
-    user: e.userId,
-    status: e.status,
-    severity: e.severity,
-    desc: e.description
-  }));
-
-  const prompt = `Act as an elite Tier 3 SOC Analyst. Analyze these high-priority security events and map them to the MITRE ATT&CK framework.
-  Provide a detailed technical justification, specific contributing factors, and prioritized remediation steps.
-  
-  Events to analyze:
-  ${JSON.stringify(eventContext, null, 2)}`;
-
   try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        systemInstruction: "You are an AI Security Expert. Return strictly valid JSON. Map patterns to MITRE techniques (e.g., T1110 for Brute Force).",
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            explanation: { type: Type.STRING },
-            factors: { type: Type.ARRAY, items: { type: Type.STRING } },
-            confidence: { type: Type.STRING },
-            summary: { type: Type.STRING },
-            mitreAttack: { type: Type.STRING, description: "MITRE ATT&CK Technique code and name." },
-            recommendedActions: { type: Type.ARRAY, items: { type: Type.STRING } }
-          },
-          required: ["explanation", "factors", "confidence", "summary", "mitreAttack", "recommendedActions"]
-        }
-      }
+    // Call backend AI analysis endpoint
+    const response = await fetch(`${BACKEND_URL}/api/ai/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        threats: events.map(e => ({
+          id: e.id,
+          timestamp: e.timestamp.toISOString(),
+          type: e.type,
+          sourceIp: e.sourceIp,
+          userId: e.userId,
+          status: e.status,
+          severity: e.severity,
+          description: e.description,
+          country: e.country,
+          mitre: e.mitre
+        }))
+      })
     });
 
-    return JSON.parse(response.text) as AIReasoning;
+    if (!response.ok) {
+      throw new Error(`Backend API error: ${response.status}`);
+    }
+
+    const analysis = await response.json();
+
+    // Check for error in response
+    if (analysis.error) {
+      throw new Error(analysis.error);
+    }
+
+    return {
+      explanation: analysis.explanation,
+      factors: analysis.factors,
+      confidence: analysis.confidence,
+      summary: analysis.summary,
+      mitreAttack: analysis.mitreAttack,
+      recommendedActions: analysis.recommendedActions
+    } as AIReasoning;
+
   } catch (error: any) {
-    if ((error?.message?.includes('429') || error?.status === 429) && retryCount < 3) {
-      await delay(Math.pow(2, retryCount) * 2000);
+    console.error('AI analysis error:', error);
+
+    if (retryCount < 2) {
+      await delay(Math.pow(2, retryCount) * 1000);
       return analyzeThreat(events, retryCount + 1);
     }
+
     return {
-      explanation: "Analysis engine is currently cooling down due to high traffic volume. Heuristic patterns still suggest active lateral movement.",
-      factors: ["Rate limit threshold reached"],
-      confidence: 'Medium',
-      summary: "AI Analysis Throttled - Manual Review Recommended",
-      mitreAttack: "T1110 - Brute Force (Predicted)",
-      recommendedActions: ["Check API Quota", "Verify source IP blocklists"]
+      explanation: "AI analysis engine temporarily unavailable. System operating in fallback mode with heuristic detection.",
+      factors: ["Backend service unavailable", "Network connectivity issue"],
+      confidence: 'Low',
+      summary: "AI Analysis Unavailable - Manual Review Recommended",
+      mitreAttack: "N/A - Service Unavailable",
+      recommendedActions: ["Check backend connectivity", "Review events manually", "Verify API endpoint health"]
     };
   }
 };
 
 export const generateForensicReport = async (event: SecurityEvent): Promise<ForensicReport> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-  // Using Pro for deep forensics
-  const model = 'gemini-3-pro-preview';
-
-  const prompt = `Generate a comprehensive forensic investigation report for the following security incident:
-  ID: ${event.id}
-  Type: ${event.type}
-  Source IP: ${event.sourceIp}
-  User: ${event.userId}
-  Description: ${event.description}
-  Country: ${event.country}
-  Severity: ${event.severity}
-  Timestamp: ${event.timestamp.toISOString()}
-
-  The report should be structured for executive and technical stakeholders.`;
-
   try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        thinkingConfig: { thinkingBudget: 4000 },
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            summary: { type: Type.STRING },
-            technicalDetails: { type: Type.STRING },
-            timeline: { type: Type.ARRAY, items: { type: Type.STRING } },
-            riskAssessment: { type: Type.STRING },
-            remediationSteps: { type: Type.ARRAY, items: { type: Type.STRING } }
-          },
-          required: ["summary", "technicalDetails", "timeline", "riskAssessment", "remediationSteps"]
-        }
-      }
+    // Call backend for forensic analysis (using same AI analysis endpoint)
+    const response = await fetch(`${BACKEND_URL}/api/ai/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        threats: [event]
+      })
     });
 
-    return JSON.parse(response.text) as ForensicReport;
+    if (!response.ok) {
+      throw new Error(`Backend API error: ${response.status}`);
+    }
+
+    const analysis = await response.json();
+
+    // Convert to forensic report format
+    return {
+      summary: analysis.summary || "Security incident detected",
+      technicalDetails: analysis.explanation || "Analysis unavailable",
+      timeline: [
+        `${event.timestamp.toISOString()}: Event detected from ${event.sourceIp}`,
+        `Type: ${event.type}`,
+        `Severity: ${event.severity}`
+      ],
+      riskAssessment: `Confidence: ${analysis.confidence}. ${analysis.explanation}`,
+      remediationSteps: analysis.recommendedActions || ["Review manually"]
+    };
   } catch (error) {
     console.error("Forensic generation failed", error);
     throw error;

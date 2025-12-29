@@ -136,8 +136,10 @@ export function mapBackendDashboardStatsToFrontend(backendStats: BackendDashboar
 
 /**
  * Create scenario-based event for simulation
+ * @param scenario - The scenario type (normal, brute_force, etc.)
+ * @param scenarioId - Scenario epoch ID for state-aware streaming
  */
-export function createSimulationEvent(scenario: string): any {
+export function createSimulationEvent(scenario: string, scenarioId: number): any {
   const timestamp = new Date().toISOString();
   const eventId = `SIM-${Date.now()}`;
 
@@ -151,7 +153,7 @@ export function createSimulationEvent(scenario: string): any {
       destination_port: 22,
       protocol: 'TCP',
       payload: { attempts: Math.floor(Math.random() * 200) + 50 },
-      metadata: { scenario: 'brute_force' }
+      metadata: { scenario: 'brute_force', scenario_id: scenarioId }
     },
     sql_injection: {
       event_id: eventId,
@@ -162,7 +164,7 @@ export function createSimulationEvent(scenario: string): any {
       destination_port: 443,
       protocol: 'HTTPS',
       payload: { query: "' OR '1'='1' --" },
-      metadata: { scenario: 'sql_injection' }
+      metadata: { scenario: 'sql_injection', scenario_id: scenarioId }
     },
     ddos: {
       event_id: eventId,
@@ -173,7 +175,7 @@ export function createSimulationEvent(scenario: string): any {
       destination_port: 80,
       protocol: 'UDP',
       payload: { packets_per_sec: Math.floor(Math.random() * 10000) + 5000 },
-      metadata: { scenario: 'ddos' }
+      metadata: { scenario: 'ddos', scenario_id: scenarioId }
     },
     ransomware: {
       event_id: eventId,
@@ -184,7 +186,7 @@ export function createSimulationEvent(scenario: string): any {
       destination_port: 445,
       protocol: 'SMB',
       payload: { encrypted_files: Math.floor(Math.random() * 1000) + 100 },
-      metadata: { scenario: 'ransomware' }
+      metadata: { scenario: 'ransomware', scenario_id: scenarioId }
     },
     normal: {
       event_id: eventId,
@@ -204,7 +206,7 @@ export function createSimulationEvent(scenario: string): any {
         return protocols[Math.floor(Math.random() * protocols.length)];
       })(),
       payload: { bytes: Math.floor(Math.random() * 5000) + 100 },
-      metadata: { scenario: 'normal' }
+      metadata: { scenario: 'normal', scenario_id: scenarioId }
     }
   };
 

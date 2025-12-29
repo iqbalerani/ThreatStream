@@ -49,10 +49,10 @@ const Dashboard: React.FC<DashboardProps> = ({ events, riskScore, threatLevel, a
         </div>
       </div>
 
-      <div className="lg:col-span-8 space-y-6 flex flex-col h-[700px]">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1">
+      <div className="lg:col-span-8 space-y-6 flex flex-col min-h-[700px]">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1 auto-rows-fr">
           {/* Main Risk Display */}
-          <div className="md:col-span-5 bg-[#0f172a] border border-slate-800 rounded-[2.5rem] p-10 shadow-xl flex flex-col justify-center items-center relative overflow-hidden group">
+          <div className="md:col-span-5 h-full bg-[#0f172a] border border-slate-800 rounded-[2.5rem] p-10 shadow-xl flex flex-col justify-center items-center relative overflow-hidden group">
             <h2 className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-500 mb-12 w-full text-center shrink-0">Real-time Risk Index</h2>
             <div className="flex-1 flex items-center justify-center w-full">
               <RiskMeter score={riskScore} level={threatLevel} />
@@ -60,7 +60,7 @@ const Dashboard: React.FC<DashboardProps> = ({ events, riskScore, threatLevel, a
           </div>
 
           {/* AI Reasoning Module */}
-          <div className="md:col-span-7 bg-[#0f172a] border border-slate-800 rounded-[2.5rem] overflow-hidden shadow-xl flex flex-col border-t-indigo-500/50 relative">
+          <div className="md:col-span-7 h-full bg-[#0f172a] border border-slate-800 rounded-[2.5rem] overflow-hidden shadow-xl flex flex-col border-t-indigo-500/50 relative">
             <div className="p-6 border-b border-slate-800 bg-slate-800/20 flex justify-between items-center shrink-0">
               <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
                 <span className={`${isAnalyzing ? 'animate-spin text-indigo-400' : 'text-indigo-400'}`}>
@@ -148,11 +148,11 @@ const Dashboard: React.FC<DashboardProps> = ({ events, riskScore, threatLevel, a
             <div className="flex-[2] bg-[#0f172a] border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl flex flex-col">
               <div className="mb-4 flex justify-between items-center">
                 <div>
-                  <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 mb-1">Risk Trajectory</h2>
-                  <p className="text-[8px] font-bold text-slate-600 uppercase">30-Minute Telemetry Window</p>
+                  <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 mb-1">Risk Propagation Timeline</h2>
+                  <p className="text-[8px] font-bold text-slate-600 uppercase">Real-Time Risk Index Levels</p>
                 </div>
                 <div className="bg-indigo-500/5 border border-indigo-500/10 px-3 py-1 rounded text-[9px] font-black text-indigo-400 uppercase tracking-widest">
-                  Real-time Propagation
+                  Live Data
                 </div>
               </div>
               <div className="flex-1">

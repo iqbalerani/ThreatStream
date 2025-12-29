@@ -70,6 +70,21 @@ class ThreatStreamProducer:
         """Publish system metrics to Kafka."""
         self.produce_threat(metrics_data, settings.kafka_metrics_topic)
 
+    def produce_risk_index(self, risk_data: Dict[str, Any]):
+        """
+        Publish risk index snapshot to Kafka.
+
+        Enables:
+        - Historical risk timeline analysis
+        - Replay for demos
+        - Anomaly detection on risk trends
+        - Audit trail for risk changes
+
+        Args:
+            risk_data: Risk index data with timestamp, value, level, trend
+        """
+        self.produce_threat(risk_data, settings.kafka_risk_index_topic)
+
     def flush(self):
         """Flush any pending messages."""
         if self.producer:

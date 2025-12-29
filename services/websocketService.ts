@@ -78,6 +78,17 @@ export class ThreatStreamWebSocket {
   }
 
   /**
+   * Send handshake with scenario epoch (for epoch-aware state)
+   */
+  sendHandshake(epoch: number) {
+    this.send({
+      type: 'handshake',
+      epoch: epoch
+    });
+    console.log(`🤝 Sent handshake with epoch: ${epoch}`);
+  }
+
+  /**
    * Request current state from backend
    */
   requestState() {
@@ -108,8 +119,8 @@ export class ThreatStreamWebSocket {
     this.reconnectAttempts = 0;
     this.notifyStatus('connected');
 
-    // Request initial state
-    this.requestState();
+    // NOTE: Initial state is now requested via handshake from the client
+    // This allows epoch-aware state management to prevent stale data on reconnect
   }
 
   /**

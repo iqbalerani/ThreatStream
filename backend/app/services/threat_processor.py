@@ -43,6 +43,7 @@ class ThreatProcessor:
         Main processing pipeline for security events.
 
         Pipeline Steps:
+        0. Check scenario epoch (state-aware streaming)
         1. Parse event
         2. Geo enrichment
         3. AI analysis
@@ -59,6 +60,19 @@ class ThreatProcessor:
         start_time = time.time()
 
         try:
+            # Step 0: State-aware streaming - Drop stale events from old scenarios
+            # Import CURRENT_SCENARIO_ID from main module
+            from app.main import CURRENT_SCENARIO_ID
+
+            event_scenario_id = event_data.get("metadata", {}).get("scenario_id")
+            if event_scenario_id is not None and CURRENT_SCENARIO_ID is not None:
+                if event_scenario_id != CURRENT_SCENARIO_ID:
+                    logger.debug(
+                        f"⏭️  Dropping stale event from old scenario epoch: "
+                        f"{event_scenario_id} (current: {CURRENT_SCENARIO_ID})"
+                    )
+                    return  # Drop event - it's from an old scenario
+
             # Step 1: Parse event
             event = SecurityEvent(**event_data)
             self.events_processed += 1
@@ -119,9 +133,19 @@ class ThreatProcessor:
             # Step 7: Update metrics
             await self.metrics.record_event_processed()
 
+            # Always record threat for risk index calculation (including INFO events with negative contribution)
+            await self.metrics.record_threat(threat)
+
+            # Only increment threat counter for actual threats (non-INFO)
             if analysis.severity != SeverityLevel.INFO:
                 self.threats_detected += 1
-                await self.metrics.record_threat(threat)
+
+            # Step 7.5: Broadcast updated risk index to WebSocket clients
+            risk_index = self.metrics.get_current_risk_index()
+            await self.ws_manager.broadcast(jsonable_encoder({
+                "type": "risk_update",
+                "data": risk_index
+            }))
 
             await self.metrics.record_detection_time(processing_time)
 
