@@ -1,10 +1,11 @@
 """
-AI Threat Analyzer using OpenRouter (Gemini 2.5 Flash)
+AI Threat Analyzer using Google Vertex AI (Gemini)
 """
 import json
 import asyncio
 from typing import Dict, Any
-import httpx
+import vertexai
+from vertexai.generative_models import GenerativeModel, GenerationConfig
 from app.config import settings
 from app.models.threat import GeminiAnalysis, SeverityLevel, ThreatType
 from app.utils.logger import get_logger
@@ -15,7 +16,7 @@ logger = get_logger(__name__)
 
 class GeminiThreatAnalyzer:
     """
-    AI-powered threat analyzer using OpenRouter with Gemini 2.5 Flash.
+    AI-powered threat analyzer using Google Vertex AI (Gemini).
 
     Provides:
     - Threat severity classification
@@ -25,18 +26,27 @@ class GeminiThreatAnalyzer:
     """
 
     def __init__(self):
-        self.openrouter_api_key = settings.openrouter_api_key
-        self.model = settings.openrouter_model
-        self.base_url = "https://openrouter.ai/api/v1/chat/completions"
+        self.project_id = settings.google_cloud_project
+        self.location = settings.gcp_region
+        self.model_name = settings.gemini_model
 
         # Rate limiting
         self._semaphore = asyncio.Semaphore(settings.gemini_rate_limit)
         self._request_count = 0
 
-        if self.openrouter_api_key:
-            logger.info(f"Gemini Analyzer initialized via OpenRouter: {self.model}")
-        else:
-            logger.warning("OpenRouter API key not configured - using fallback analysis")
+        # Initialize Vertex AI
+        try:
+            if self.project_id and self.project_id != "your-project-id":
+                vertexai.init(project=self.project_id, location=self.location)
+                self.model = GenerativeModel(self.model_name)
+                logger.info(f"Vertex AI initialized: {self.model_name} in {self.location}")
+            else:
+                self.model = None
+                logger.warning("Google Cloud project not configured - using fallback analysis")
+        except Exception as e:
+            self.model = None
+            logger.error(f"Failed to initialize Vertex AI: {e}")
+            logger.warning("Falling back to rule-based analysis")
 
     def _build_analysis_prompt(self, event: Dict[str, Any]) -> str:
         """Build the analysis prompt for Gemini."""
@@ -77,7 +87,7 @@ Respond ONLY with the JSON, no markdown formatting."""
 
     async def analyze(self, event: Dict[str, Any]) -> GeminiAnalysis:
         """
-        Analyze a security event using Gemini AI via OpenRouter.
+        Analyze a security event using Vertex AI Gemini.
 
         Args:
             event: Raw security event data
@@ -90,7 +100,7 @@ Respond ONLY with the JSON, no markdown formatting."""
         if metadata.get("scenario") == "normal":
             return self._fallback_analysis(event, force_normal=True)
 
-        if not self.openrouter_api_key:
+        if not self.model:
             return self._fallback_analysis(event)
 
         async with self._semaphore:
@@ -99,38 +109,25 @@ Respond ONLY with the JSON, no markdown formatting."""
 
                 prompt = self._build_analysis_prompt(event)
 
-                # Prepare OpenRouter API request
-                headers = {
-                    "Authorization": f"Bearer {self.openrouter_api_key}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://threatstream.app",  # Optional but recommended
-                    "X-Title": "ThreatStream Security Platform"  # Optional but recommended
-                }
+                # Configure generation parameters
+                generation_config = GenerationConfig(
+                    temperature=settings.gemini_temperature,
+                    max_output_tokens=settings.gemini_max_tokens,
+                )
 
-                payload = {
-                    "model": self.model,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    "temperature": settings.gemini_temperature,
-                    "max_tokens": settings.gemini_max_tokens,
-                }
-
-                # Make async HTTP request to OpenRouter
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.post(
-                        self.base_url,
-                        headers=headers,
-                        json=payload
+                # Generate content using Vertex AI
+                # Note: Vertex AI's generate_content is not async, so we run it in executor
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self.model.generate_content(
+                        prompt,
+                        generation_config=generation_config
                     )
-                    response.raise_for_status()
-                    result = response.json()
+                )
 
-                # Extract the response
-                response_text = result["choices"][0]["message"]["content"]
+                # Extract the response text
+                response_text = response.text
 
                 # Handle markdown code blocks
                 if "```json" in response_text:
@@ -157,7 +154,7 @@ Respond ONLY with the JSON, no markdown formatting."""
                     recommended_actions=analysis_dict["recommended_actions"],
                     mitre_attack_id=mitre_id,
                     mitre_attack_name=mitre_name,
-                    audit_ref="OPENROUTER-GEMINI-2.5-FLASH"
+                    audit_ref="VERTEX-AI-GEMINI"
                 )
 
             except json.JSONDecodeError as e:
@@ -165,12 +162,8 @@ Respond ONLY with the JSON, no markdown formatting."""
                 logger.error(f"Response text: {response_text if 'response_text' in locals() else 'N/A'}")
                 return self._fallback_analysis(event)
 
-            except httpx.HTTPStatusError as e:
-                logger.error(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")
-                return self._fallback_analysis(event)
-
             except Exception as e:
-                logger.error(f"AI analysis error: {e}")
+                logger.error(f"Vertex AI analysis error: {e}")
                 return self._fallback_analysis(event)
 
     def _fallback_analysis(self, event: Dict[str, Any], force_normal: bool = False) -> GeminiAnalysis:
@@ -245,8 +238,10 @@ Respond ONLY with the JSON, no markdown formatting."""
     def get_metrics(self) -> Dict:
         """Get analyzer metrics for monitoring."""
         return {
-            "model": self.model,
+            "model": self.model_name,
             "requests_processed": self._request_count,
             "rate_limit": settings.gemini_rate_limit,
-            "provider": "OpenRouter"
+            "provider": "Vertex AI",
+            "project_id": self.project_id,
+            "location": self.location
         }

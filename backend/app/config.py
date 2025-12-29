@@ -38,16 +38,11 @@ class Settings(BaseSettings):
     google_application_credentials: str = Field(default="")
     gcp_region: str = Field(default="us-central1")
 
-    # Gemini (Legacy - kept for fallback)
-    gemini_api_key: str = Field(default="")
+    # Vertex AI (Gemini via Google Cloud)
     gemini_model: str = Field(default="gemini-1.5-flash")
     gemini_temperature: float = Field(default=0.1)
     gemini_max_tokens: int = Field(default=2048)
     gemini_rate_limit: int = Field(default=60)
-
-    # OpenRouter (Primary AI Provider)
-    openrouter_api_key: str = Field(default="")
-    openrouter_model: str = Field(default="google/gemini-2.0-flash-exp:free")
 
     # Firestore Collections
     firestore_database: str = Field(default="(default)")
