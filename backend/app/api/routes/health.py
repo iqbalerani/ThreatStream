@@ -22,7 +22,7 @@ async def health_check():
         "environment": settings.environment,
         "services": {
             "kafka": "configured" if settings.confluent_bootstrap_servers else "not_configured",
-            "gemini": "configured" if settings.gemini_api_key else "not_configured",
+            "gemini": "configured" if settings.google_cloud_project else "not_configured",
             "firestore": "configured" if settings.google_cloud_project else "not_configured"
         }
     }
