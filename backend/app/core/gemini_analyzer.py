@@ -37,15 +37,17 @@ class GeminiThreatAnalyzer:
         # Initialize Vertex AI
         try:
             if self.project_id and self.project_id != "your-project-id":
+                logger.info(f"Initializing Vertex AI with project={self.project_id}, location={self.location}, model={self.model_name}")
                 vertexai.init(project=self.project_id, location=self.location)
+                logger.info(f"vertexai.init() succeeded")
                 self.model = GenerativeModel(self.model_name)
-                logger.info(f"Vertex AI initialized: {self.model_name} in {self.location}")
+                logger.info(f"✅ Vertex AI initialized successfully: {self.model_name} in {self.location}")
             else:
                 self.model = None
                 logger.warning("Google Cloud project not configured - using fallback analysis")
         except Exception as e:
             self.model = None
-            logger.error(f"Failed to initialize Vertex AI: {e}")
+            logger.error(f"❌ Failed to initialize Vertex AI: {e}")
             logger.warning("Falling back to rule-based analysis")
 
     def _build_analysis_prompt(self, event: Dict[str, Any]) -> str:
