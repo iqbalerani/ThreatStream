@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("✅ ThreatStream Backend started successfully")
     logger.info(f"📡 Kafka: {settings.kafka_raw_topic if settings.confluent_bootstrap_servers else 'Not configured'}")
-    logger.info(f"🧠 AI Engine: {settings.gemini_model if settings.gemini_api_key else 'Not configured'}")
+    logger.info(f"🧠 AI Engine: {settings.gemini_model if settings.google_cloud_project else 'Not configured'}")
     logger.info(f"🌍 Environment: {settings.environment}")
     logger.info(f"🔌 WebSocket Manager: Active")
     logger.info(f"⚙️  Threat Processor: Initialized")
@@ -296,14 +296,10 @@ async def simulate_event(event_data: dict):
         # IMMEDIATE PROCESSING: Process event directly for instant display
         # This bypasses Kafka consumer lag and provides real-time updates
         if threat_processor:
-            from app.models.events import SecurityEvent
-
-            # Convert dict to SecurityEvent model
-            security_event = SecurityEvent(**event_data)
-
             # Process immediately (will broadcast via WebSocket)
-            await threat_processor.process_event(security_event)
-            logger.debug(f"⚡ Immediately processed simulation event {security_event.event_id}")
+            # threat_processor expects dict, not SecurityEvent object
+            await threat_processor.process_event(event_data)
+            logger.debug(f"⚡ Immediately processed simulation event {event_data.get('event_id', 'unknown')}")
 
         return {
             "status": "success",
